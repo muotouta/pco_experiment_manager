@@ -6,7 +6,7 @@ pcoカメラによる計測用アプリケーション「pco_experiment_manager�
 """
 
 __author__ = 'Tao Muto'
-__version__ = '0.1.1'
+__version__ = '0.1.2'
 __date__ = '2025.12.26'
 
 
@@ -15,6 +15,7 @@ import queue
 import datetime
 import cv2
 import numpy as np
+import time
 from PyQt6.QtCore import QThread, pyqtSignal, pyqtSlot, Qt, QTimer
 
 
@@ -30,7 +31,7 @@ class Saver(QThread):
     def __init__(self, data_queue, a_camera_handler):
         super().__init__()
         self.data_queue = data_queue
-        self.is_running = False
+        self.is_running = True
         self.is_new_recording = False
 
         self.path = None
@@ -43,6 +44,10 @@ class Saver(QThread):
         current_trial = -1
 
         while self.is_running or not self.data_queue.empty():
+            if self.path is None:
+                time.sleep(0.1)
+                continue
+
             if current_trial != self.trial_num:
                 current_trial = self.trial_num
                 trial_dir = os.path.join(self.path, str(current_trial))
@@ -78,7 +83,7 @@ class Saver(QThread):
                 cv2.imwrite(row_format_filename, image_data)  # pcoのrawデータはuint16が多く、cv2.imwriteはuint16のTIFF保存に対応しているので、OpenCVを使用。
 
                 # 画像保存
-                img_format_filename = os.path.join(row_format_dir, f"{frame_num:06d}.{IMG_FORMAT}")  # ファイル名を生成
+                img_format_filename = os.path.join(img_format_dir, f"{frame_num:06d}.{IMG_FORMAT}")  # ファイル名を生成
                 cv2.imwrite(img_format_filename, self._trans_img(image_data))
 
                 # 保存したフレーム数を更新
@@ -118,6 +123,7 @@ class Saver(QThread):
         self.trial_num += 1
         self.fram_in_trial_num = 0
 
+    @pyqtSlot()
     def start_new_recording(self):
         """
         新しいレコーディングを始めるためのメソッド
@@ -134,7 +140,7 @@ class Saver(QThread):
             try:
                 os.makedirs(self.path)
             except OSError as e:
-                print(f"Saver Error in function \"__init__\": {e}")
+                print(f"Saver Error in function \"start_new_recording\": {e}")
 
 
     def _trans_img(self, image_data):

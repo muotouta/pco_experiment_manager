@@ -6,7 +6,7 @@ pcoカメラによる計測用アプリケーション「pco_experiment_manager�
 """
 
 __author__ = 'Tao Muto'
-__version__ = '0.1.1'
+__version__ = '0.1.2'
 __date__ = '2025.12.26'
 
 
@@ -29,7 +29,10 @@ def run():
     # 各スレッドのインスタンス化
     a_camera_handler = CameraHandler(data_queue)
     a_saver = Saver(data_queue, a_camera_handler)
-    a_window = UIer(a_camera_handler)
+    a_window = UIer(a_camera_handler, a_saver)
+
+    # CameraHandlerの録画開始シグナルをSaverの開始メソッドに接続
+    a_camera_handler.record_started_signal.connect(a_saver.start_new_recording)
     
     # スレッド開始
     a_camera_handler.start()

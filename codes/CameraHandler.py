@@ -6,7 +6,7 @@ pcoカメラによる計測用アプリケーション「pco_experiment_manager�
 """
 
 __author__ = 'Tao Muto'
-__version__ = '0.1.1'
+__version__ = '0.1.2'
 __date__ = '2025.12.26'
 
 
@@ -29,6 +29,7 @@ class CameraHandler(QThread):
         ・カメラ情報を返す
     """
 
+    # 調整用デベロッパ入力項目
     time_unit = {
         "s" : 1,
         "ms" : 1000,
@@ -36,9 +37,14 @@ class CameraHandler(QThread):
     }
     time_unit_id = "ms"
 
+    DATA_FORMAT = 'mono8'
+
     # 並列処理用フィールド
     new_frame_signal = pyqtSignal(np.ndarray, dict)  # GUIに画像を送るためのシグナル
     status_signal = pyqtSignal(str)  # エラーやステータスをGUIに送るシグナル
+    params_updated_signal = pyqtSignal()  # パラメータ更新通知用シグナル
+    record_started_signal = pyqtSignal()  # 録画開始通知用シグナル
+
 
     def __init__(self, data_queue):
         """
@@ -57,16 +63,16 @@ class CameraHandler(QThread):
             "name" : self.a_cam.camera_name,
             "bit resolution" : self.a_cam.description['bit resolution'],  # カメラのADCビット数（画像に使用するビット数）
             "bit scale" : 2 ** self.a_cam.description['bit resolution'] - 1,  # 画像のスケーリングに用いる数値（諧調数）をあらかじめ算出。
-            "exposure time" : 100 / self.time_unit[self.time_unit_id],
+            "exposure time" : 25 / self.time_unit[self.time_unit_id],
             "min exposure time" : self.a_cam.description["min exposure time"],
             "max exposure time" : self.a_cam.description["max exposure time"],
             "current min exposure time" : self.a_cam.description["min exposure time"],
             "current max exposure time" : self.a_cam.description["max exposure time"],
             "fps" : 40,
             "min fps" : 1 / (self.a_cam.description["max exposure time"] + self.a_cam.description["min delay time"]),
+            "max fps" : self._get_max_fps(),
             "current max fps" : self._get_max_fps(),
             "current min fps" : 1 / (self.a_cam.description["max exposure time"] + self.a_cam.description["min delay time"]),
-            "max fps" : self._get_max_fps(),
             "delay time" : 0.0 / self.time_unit[self.time_unit_id],
             "min delay time" : self.a_cam.description["min delay time"],
             "max delay time" : self.a_cam.description["max delay time"]
@@ -82,7 +88,9 @@ class CameraHandler(QThread):
             self._apply_camera_settings(self.a_cam)
 
             # リングバッファで録画開始
-            self.a_cam.record(mode='ring buffer', number_of_images=self.desc["fps"])  # 1秒分は保存するようにリングバッファのサイズを設定
+            buffer_size = int(self.desc["fps"])
+            if buffer_size < 1: buffer_size = 1 # 安全策
+            self.a_cam.record(mode='ring buffer', number_of_images=int(self.desc["fps"]))  # 1秒分は保存するようにリングバッファのサイズを設定
             self.a_cam.wait_for_first_image()
             frame_count = -1
 
@@ -93,7 +101,7 @@ class CameraHandler(QThread):
                     self._update_params_flag = False
 
                 # 画像取得
-                image, meta = self.a_cam.image(data_format='mono16', image_index=-1)
+                image, meta = self.a_cam.image(data_format=self.DATA_FORMAT, image_index=-1)
                 new_frame_count = meta['recorder image number']
 
                 # 撮影モードに合わせて画像の扱いを変更
@@ -102,6 +110,9 @@ class CameraHandler(QThread):
                     self.new_frame_signal.emit(display_img, meta)
                 
                 elif self.camera_mode == "queue":
+                    display_img = self._trans_img(image)
+                    self.new_frame_signal.emit(display_img, meta)  # GUIに画像を送る。
+
                     if new_frame_count > frame_count:  # 同じ画像を複数回保存しないようにする。
                         try:
                             self.data_queue.put_nowait((image.copy(), frame_count))  # put_nowait: 待たずに登録を試みる。キューが満杯(maxsize)なら queue.Full エラーが出る。
@@ -136,6 +147,10 @@ class CameraHandler(QThread):
             # 実際の値を反映
             self.desc["exposure time"] = cam.exposure_time
             self.desc["delay time"] = cam.delay_time
+            self.desc["fps"] = 1 / (self.desc["exposure time"] + self.desc["delay time"])
+
+            # 設定が完了し、descが更新されたことをUIに通知
+            self.params_updated_signal.emit()
             
         except Exception as e:
             print(f"CameraHandler Error: {e}")
@@ -159,6 +174,7 @@ class CameraHandler(QThread):
 
     def start_recording(self):
         self.is_recording = True
+        self.record_started_signal.emit()  # 録画開始シグナルを発信
 
     def stop_recording(self):
         self.is_recording = False
@@ -187,6 +203,7 @@ class CameraHandler(QThread):
         """
         実際に撮影を行うことで、理論値でない、実際の最大fpsを算出する内部メソッド。
         """
+        
         self.a_cam.configuration = {'exposure time': self.a_cam.description['min exposure time']} 
         self.a_cam.record(number_of_images=1, mode='sequence')
         image, meta = self.a_cam.image()

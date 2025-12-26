@@ -6,7 +6,7 @@ pcoカメラによる計測用アプリケーション「pco_experiment_manager�
 """
 
 __author__ = 'Tao Muto'
-__version__ = '0.1.1'
+__version__ = '0.1.3'
 __date__ = '2025.12.26'
 
 
