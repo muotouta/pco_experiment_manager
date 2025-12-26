@@ -6,8 +6,8 @@ pcoカメラによる計測用アプリケーション「pco_experiment_manager�
 """
 
 __author__ = 'Tao Muto'
-__version__ = '0.1.0'
-__date__ = '2025.12.24'
+__version__ = '0.1.1'
+__date__ = '2025.12.26'
 
 
 import pco
@@ -217,22 +217,34 @@ class UIer(QMainWindow):
         """
 
         try:
-            # メタデータから遅延時間などの実際の値を取得できれば表示更新
-            # ここでは簡易的に現在の設定値を表示
-            # (実際はCameraWorkerから現在のDelayを送ってもらうのがベスト)
+            # ラベルのサイズを取得（ウィンドウサイズに合わせて変動）
+            label_h = self.image_label.height()
+            label_w = self.image_label.width()
             
-            # --- 画像の変換と表示 --- 
+            # 現在の画像サイズ
+            h, w = image_data.shape
             
+            # アスペクト比を維持して、ラベルの高さに合わせる
+            scale = label_h / h
+            new_w = int(w * scale)
+            new_h = int(h * scale)
+            
+            # もし横幅がはみ出るなら、横幅に合わせて再計算
+            if new_w > label_w:
+                scale = label_w / w
+                new_w = int(w * scale)
+                new_h = int(h * scale)
+
+            # OpenCVでリサイズ (INTER_NEARESTは画質は粗いが最速。綺麗にしたいならINTER_LINEAR)
+            if scale < 1.0: # 画像が画面より大きい場合のみリサイズ
+                image_data = cv2.resize(image_data, (new_w, new_h), interpolation=cv2.INTER_NEAREST)
+            
+            # 3. QImage変換
             height, width = image_data.shape
             q_img = QImage(image_data.data, width, height, width, QImage.Format.Format_Grayscale8)
             
-            pixmap = QPixmap.fromImage(q_img)
-            self.image_label.setPixmap(pixmap.scaled(
-                self.image_label.size(), 
-                Qt.AspectRatioMode.KeepAspectRatio, 
-                # Qt.TransformationMode.SmoothTransformation  # 画質優先
-                Qt.TransformationMode.FastTransformation  # 速度優先
-            ))
+            # 4. 表示
+            self.image_label.setPixmap(QPixmap.fromImage(q_img))
 
         except Exception as e:
             print(f"UIer Error in function \"update_display\": {e}")

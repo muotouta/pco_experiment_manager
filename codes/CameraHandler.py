@@ -6,8 +6,8 @@ pcoカメラによる計測用アプリケーション「pco_experiment_manager�
 """
 
 __author__ = 'Tao Muto'
-__version__ = '0.1.0'
-__date__ = '2025.12.24'
+__version__ = '0.1.1'
+__date__ = '2025.12.26'
 
 
 import pco
@@ -49,18 +49,23 @@ class CameraHandler(QThread):
         self.data_queue = data_queue
         self.is_running = True
         self.is_recording = False # 録画中かどうかのフラグ
-        self.last_display_time = 0
-        self.display_interval = 1.0 / 30.0  # 画面表示は最大30fpsに制限
+
 
         # カメラを設定
         self.a_cam = pco.Camera()
         self.desc = {
-            "name" : self.a_cam.camera_name,    
+            "name" : self.a_cam.camera_name,
+            "bit resolution" : self.a_cam.description['bit resolution'],  # カメラのADCビット数（画像に使用するビット数）
+            "bit scale" : 2 ** self.a_cam.description['bit resolution'] - 1,  # 画像のスケーリングに用いる数値（諧調数）をあらかじめ算出。
             "exposure time" : 100 / self.time_unit[self.time_unit_id],
             "min exposure time" : self.a_cam.description["min exposure time"],
             "max exposure time" : self.a_cam.description["max exposure time"],
+            "current min exposure time" : self.a_cam.description["min exposure time"],
+            "current max exposure time" : self.a_cam.description["max exposure time"],
             "fps" : 40,
             "min fps" : 1 / (self.a_cam.description["max exposure time"] + self.a_cam.description["min delay time"]),
+            "current max fps" : self._get_max_fps(),
+            "current min fps" : 1 / (self.a_cam.description["max exposure time"] + self.a_cam.description["min delay time"]),
             "max fps" : self._get_max_fps(),
             "delay time" : 0.0 / self.time_unit[self.time_unit_id],
             "min delay time" : self.a_cam.description["min delay time"],
@@ -93,11 +98,8 @@ class CameraHandler(QThread):
 
                 # 撮影モードに合わせて画像の扱いを変更
                 if self.camera_mode == "shot":
-                    current_time = time.time()
-                    if (current_time - self.last_display_time) > self.display_interval:
-                        display_img = self._trans_img(image)
-                        self.new_frame_signal.emit(display_img, meta)
-                        self.last_display_time = current_time
+                    display_img = self._trans_img(image)
+                    self.new_frame_signal.emit(display_img, meta)
                 
                 elif self.camera_mode == "queue":
                     if new_frame_count > frame_count:  # 同じ画像を複数回保存しないようにする。
@@ -168,17 +170,15 @@ class CameraHandler(QThread):
 
     def _trans_img(self, image_data):
         """
-        画像を、PyQtでの表示に適した形式に変換するメソッド
+        画像をUI用に8ビット表示にするメソッド
+        カメラの撮影ビットスケールに合わせて変換する。
         """
-        if image_data.dtype == np.uint16:  # 形式が16bit(uint16)なら画面表示用に8bit (uint8) に変換する。
-            # display_img = (image_data / 65535 * 255).astype(np.uint8)
-            display_img = (image_data >> 8).astype(np.uint8)
-            print("aaa")
+        
+        if image_data.dtype == np.uint16:  # 形式が16bit(uint16)なら画面表示用に8bit (uint8) に変換
+            display_img = (image_data / self.desc['bit scale'] * 255).astype(np.uint8)
         elif image_data.dtype == np.uint8:
             display_img = image_data
-            print("bbb")
         else:  # その他の型の場合は正規化
-            print("ccc")
             display_img = cv2.normalize(image_data, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
 
         return display_img

@@ -6,8 +6,8 @@ pcoカメラによる計測用アプリケーション「pco_experiment_manager�
 """
 
 __author__ = 'Tao Muto'
-__version__ = '0.1.0'
-__date__ = '2025.12.25'
+__version__ = '0.1.1'
+__date__ = '2025.12.26'
 
 
 import sys
@@ -28,7 +28,7 @@ def run():
     
     # 各スレッドのインスタンス化
     a_camera_handler = CameraHandler(data_queue)
-    a_saver = Saver(data_queue)
+    a_saver = Saver(data_queue, a_camera_handler)
     a_window = UIer(a_camera_handler)
     
     # スレッド開始
