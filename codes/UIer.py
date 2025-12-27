@@ -6,7 +6,7 @@ pcoカメラによる計測用アプリケーション「pco_experiment_manager�
 """
 
 __author__ = 'Tao Muto'
-__version__ = '0.1.4'
+__version__ = '0.1.5'
 __date__ = '2025.12.27'
 
 
@@ -45,6 +45,12 @@ class UIer(QMainWindow):
 
         self.a_camera_handler = a_camera_handler
         self.a_saver = a_saver
+
+        # カウントダウン用タイマーの設定
+        self.rec_timer = QTimer(self)
+        self.rec_timer.setInterval(1000) # 1秒間隔
+        self.rec_timer.timeout.connect(self.on_countdown_tick)
+        self.countdown_val = 3
 
         # シグナル接続
         self.a_camera_handler.new_frame_signal.connect(self.update_display)
@@ -279,7 +285,7 @@ class UIer(QMainWindow):
         入力制限と説明ラベルを更新するメソッド（安全装置付き修正版）
         """
         try:
-            # --- 1. 共通の定数・現在値の取得 ---
+            # --- 共通の定数・現在値の取得 ---
             # 物理的な最小遅延時間（秒）
             min_delay_s = self.a_camera_handler.desc.get("min delay time", 0.0)
             
@@ -296,7 +302,7 @@ class UIer(QMainWindow):
             curr_exp_s = curr_exp_val / self.time_unit[self.time_unit_id]
             curr_fps = self.spin_fps.value()
 
-            # --- 2. 相互の制限値を計算 ---
+            # --- 相互の制限値を計算 ---
             
             # A. 現在のExposure値における、理論上の最大FPS
             if (curr_exp_s + min_delay_s) > 0:
@@ -324,7 +330,7 @@ class UIer(QMainWindow):
             disp_min_exp = self.a_camera_handler.desc["min exposure time"] * self.time_unit[self.time_unit_id]
 
 
-            # --- 3. 入力フォームの制限 (SpinBox) ---
+            # --- 入力フォームの制限 (SpinBox) ---
             if self.rb_exposure.isChecked():  # Exposure固定モード（FPS可変）
                 fps_limit = max(real_max_fps, self.spin_fps.minimum())
                 self.spin_fps.setMaximum(fps_limit)
@@ -342,7 +348,7 @@ class UIer(QMainWindow):
                 self.spin_fps.setMaximum(hw_max_fps)
 
 
-            # --- 4. 説明ラベルの更新 (Label) ---
+            # --- 説明ラベルの更新 (Label) ---
             self.description_exposure.setText(f"{disp_min_exp:.3f} ~ {disp_max_exp:.3f} ({self.time_unit_id})")
             self.description_fps.setText(f"~  {real_max_fps:.3f} (fps)")
 
@@ -386,25 +392,23 @@ class UIer(QMainWindow):
             print(f"UIer Error in function \"on_params_updated\": {e}")
         
     def on_record_toggled(self, checked):
-        if checked:
-            # 録画開始
-            self.btn_record.setText("Stop")
-            self.btn_record.setStyleSheet("background-color: #ffcccc; color: red; font-weight: bold;")
-
-            # 録画中はプルダウンを無効化
+        if checked:  # Startボタン押下
+            # UIをロック
             self.combo_rec_mode.setEnabled(False)
-            
-            # programモードなら設定項目全体をロック
             if self.combo_rec_mode.currentText() == "program":
                 self.settings_group.setEnabled(False)
                 self.trigger_group.setEnabled(False)
             
-            # カメラのモードを変更
-            self.a_camera_handler.set_camera_mode("queue")
-            self.a_camera_handler.start_recording()
+            # カウントダウンの準備と開始（録画はまだ始めない）
+            self.countdown_val = 3
+            self.btn_record.setText(str(self.countdown_val)) # ボタン文字を "3" に
+            self.rec_timer.start() # タイマースタート
 
-        else:
-            # 録画停止
+        else:  # Stopボタン押下、またはカウントダウン中のキャンセル
+            # タイマーを止める（カウントダウン中だった場合のため）
+            self.rec_timer.stop()
+
+            # ボタン表示を元に戻す
             self.btn_record.setText("Start")
             self.btn_record.setStyleSheet("")
 
@@ -418,10 +422,29 @@ class UIer(QMainWindow):
             # Cameraグループを有効化した後、ラジオボタンの排他制御が崩れないよう再適用
             self.toggle_inputs()
 
-            # カメラのモードを変更
+            # カメラのモードを変更（録画中でなくても呼んで安全）
             self.a_camera_handler.set_camera_mode("shot")
             self.a_camera_handler.stop_recording()
 
+    def on_countdown_tick(self):
+        """
+        タイマーによって1秒ごとに呼ばれるメソッド
+        """
+        self.countdown_val -= 1
+        
+        if self.countdown_val > 0:  # カウントダウン継続中は数字を更新
+            self.btn_record.setText(str(self.countdown_val))
+        else:  # カウントダウン終了後、実際の録画を開始
+            self.rec_timer.stop() # タイマー停止
+            
+            # ボタン表示を "Stop" に変更
+            self.btn_record.setText("Stop")
+            self.btn_record.setStyleSheet("background-color: #ffcccc; color: red; font-weight: bold;")
+            
+            # 実際の録画開始命令
+            self.a_saver.start_new_recording()
+            self.a_camera_handler.set_camera_mode("queue")
+            self.a_camera_handler.start_recording()
 
 
     @pyqtSlot(np.ndarray, dict)
