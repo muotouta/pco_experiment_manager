@@ -18,13 +18,10 @@ class Conductor():
     実験の遂行を司るクラス
     """
 
-    time_unit = {
-        "s" : 1,
-        "ms" : 1000,
-        "μs" : 1000000
+    desc = {
+        'file name' : str,
+        
     }
-    time_unit_id = "ms"
-
 
     def __init__(self):
         pass
