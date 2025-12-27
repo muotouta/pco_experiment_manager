@@ -6,8 +6,8 @@ pcoカメラによる計測用アプリケーション「pco_experiment_manager�
 """
 
 __author__ = 'Tao Muto'
-__version__ = '0.1.2'
-__date__ = '2025.12.26'
+__version__ = '0.1.3'
+__date__ = '2025.12.27'
 
 
 import os
@@ -42,6 +42,14 @@ class Saver(QThread):
 
     def run(self):
         current_trial = -1
+        #######################
+        # -1をもちいるやり方をやめる。保存画像の最初の一枚の名前がおかしくなる。
+        #######################
+
+
+        #######################
+        # トライアル間の時間が短い場合には、データをトライアル事にわけてディレクトリに保存することをしっぱいして、境目の画像が本来はいるべきディレクトリでないところにはいってしまうのでは？それをどう避ける。
+        #######################
 
         while self.is_running or not self.data_queue.empty():
             if self.path is None:
@@ -85,6 +93,11 @@ class Saver(QThread):
                 # 画像保存
                 img_format_filename = os.path.join(img_format_dir, f"{frame_num:06d}.{IMG_FORMAT}")  # ファイル名を生成
                 cv2.imwrite(img_format_filename, self._trans_img(image_data))
+
+                #######################
+                # 画像のフレーム番号を確認し続け、そこに飛びがあったら、テキストファイルにそのことを記録する。
+                # レコーディング全体を司るメモに、何トライアル目でそれがあったかを記録する。
+                #######################
 
                 # 保存したフレーム数を更新
                 self.fram_in_trial_num += 1

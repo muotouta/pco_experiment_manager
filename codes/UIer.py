@@ -6,8 +6,8 @@ pcoカメラによる計測用アプリケーション「pco_experiment_manager�
 """
 
 __author__ = 'Tao Muto'
-__version__ = '0.1.3'
-__date__ = '2025.12.26'
+__version__ = '0.1.4'
+__date__ = '2025.12.27'
 
 
 import pco
@@ -161,8 +161,8 @@ class UIer(QMainWindow):
         self.trigger_group = QGroupBox("Trigger")
         trigger_layout = QVBoxLayout()
         
-        self.chk_laser1 = QCheckBox("Laser 1")
-        self.chk_laser2 = QCheckBox("Laser 2")
+        self.chk_laser1 = QCheckBox("Blue Laser")
+        self.chk_laser2 = QCheckBox("Red Laser")
         self.chk_speaker = QCheckBox("Speaker")
         self.chk_ttl = QCheckBox("5V TTL")
         
