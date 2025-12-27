@@ -204,8 +204,18 @@ class UIer(QMainWindow):
         font_btn.setBold(True)
         self.btn_record.setFont(font_btn)
         self.btn_record.toggled.connect(self.on_record_toggled)
-        
         record_layout.addWidget(self.btn_record)
+
+        self.lbl_countdown = QLabel("")
+        self.lbl_countdown.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.lbl_countdown.setFixedHeight(40) # 高さを確保
+        font_cd = QFont()
+        font_cd.setPointSize(24)
+        font_cd.setBold(True)
+        self.lbl_countdown.setFont(font_cd)
+        self.lbl_countdown.setStyleSheet("color: red;")
+        
+        record_layout.addWidget(self.lbl_countdown)
         record_group.setLayout(record_layout)
         panel_layout.addWidget(record_group)
 
@@ -393,36 +403,51 @@ class UIer(QMainWindow):
         
     def on_record_toggled(self, checked):
         if checked:  # Startボタン押下
-            # UIをロック
+            # UIロック
             self.combo_rec_mode.setEnabled(False)
             if self.combo_rec_mode.currentText() == "program":
                 self.settings_group.setEnabled(False)
                 self.trigger_group.setEnabled(False)
             
-            # カウントダウンの準備と開始（録画はまだ始めない）
+            # カウントダウン準備
             self.countdown_val = 3
-            self.btn_record.setText(str(self.countdown_val)) # ボタン文字を "3" に
-            self.rec_timer.start() # タイマースタート
 
+            # カウントダウン数字用フォント設定
+            font = self.lbl_countdown.font()
+            font.setPointSize(16)
+            self.lbl_countdown.setFont(font)
+            
+            # ボタンの表示変更
+            self.btn_record.setText("Cancel") # ボタンは "Cancel" に
+            self.lbl_countdown.setText(str(self.countdown_val)) # 下のスペースに数字表示
+            
+            # タイマースタート
+            self.rec_timer.start()
         else:  # Stopボタン押下、またはカウントダウン中のキャンセル
-            # タイマーを止める（カウントダウン中だった場合のため）
+            # 録画中だった場合のみ、Saverの終了処理を呼ぶ
+            if not self.rec_timer.isActive():  # rec_timerが動いていないということはカウントダウンは既に終わっていることを意味し、これは録画中であることを意味する。
+                self.a_saver.end_current_recording()
+
+            # タイマー停止（カウントダウン中のキャンセルの場合）
             self.rec_timer.stop()
 
-            # ボタン表示を元に戻す
+            # "REC" や数字の表示を消去する
+            self.lbl_countdown.clear()
+            
+            # カウントダウン表示をクリア
+            self.lbl_countdown.clear()
+
+            # ボタン表示を "Start" に戻す
             self.btn_record.setText("Start")
             self.btn_record.setStyleSheet("")
 
-            # プルダウンを有効化
+            # UIロック解除
             self.combo_rec_mode.setEnabled(True)
-            
-            # 設定項目のロックを解除（有効化）
             self.settings_group.setEnabled(True)
             self.trigger_group.setEnabled(True)
-            
-            # Cameraグループを有効化した後、ラジオボタンの排他制御が崩れないよう再適用
             self.toggle_inputs()
 
-            # カメラのモードを変更（録画中でなくても呼んで安全）
+            # 録画停止処理
             self.a_camera_handler.set_camera_mode("shot")
             self.a_camera_handler.stop_recording()
 
@@ -433,19 +458,31 @@ class UIer(QMainWindow):
         self.countdown_val -= 1
         
         if self.countdown_val > 0:  # カウントダウン継続中は数字を更新
-            self.btn_record.setText(str(self.countdown_val))
+            self.lbl_countdown.setText(str(self.countdown_val))
         else:  # カウントダウン終了後、実際の録画を開始
-            self.rec_timer.stop() # タイマー停止
+            self.rec_timer.stop() # カウントダウンが0になったので、タイマー停止
+
+            # "REC" 表示用フォント設定
+            font = self.lbl_countdown.font()
+            font.setPointSize(14)
+            self.lbl_countdown.setFont(font)
             
-            # ボタン表示を "Stop" に変更
+            # 表示を "REC" に切り替える
+            self.lbl_countdown.setText("REC")
+            
+            # ボタンを "Stop" に変更
             self.btn_record.setText("Stop")
             self.btn_record.setStyleSheet("background-color: #ffcccc; color: red; font-weight: bold;")
             
-            # 実際の録画開始命令
-            self.a_saver.start_new_recording()
-            self.a_camera_handler.set_camera_mode("queue")
-            self.a_camera_handler.start_recording()
-
+            # その後に録画開始の実処理を行う
+            try:
+                current_mode = self.combo_rec_mode.currentText()
+                self.a_saver.start_new_recording(current_mode)  # 現在のプルダウンの選択値を取得してSaverに渡す。
+                self.a_camera_handler.set_camera_mode("queue")
+                self.a_camera_handler.start_recording()
+            except Exception as e:
+                self.lbl_countdown.setText("Error") # エラー表示
+                print(f"UIer Error in function \"on_countdown_tick\": {e}")
 
     @pyqtSlot(np.ndarray, dict)
     def update_display(self, image_data, meta):

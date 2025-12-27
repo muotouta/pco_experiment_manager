@@ -34,11 +34,17 @@ class Saver(QThread):
         self.is_running = True
         self.is_new_recording = False
 
-        self.path = None
-        self.trial_num = 0  # 現在何トライアル目であるかを把握するためのメソッド
-        self.fram_in_trial_num = 0  # トライアル内で何フレーム目かを把握するためのメソッド
         self.a_camera_handler = a_camera_handler
         self.a_conductor = a_conductor
+        
+        # 記録を管理するための変数群
+        self.experiment_mode = "manual"
+        self.trial_dir = None   # レコーディングごとの保存ディレクトリのpathを保存するための変数
+        self.trial_num = 0  # 現在何トライアル目であるかを把握するためのメソッド
+        self.frame_in_trial_num = 0  # トライアル内で何フレーム目かを把握するためのメソッド
+        self.frame_drop_info = f"---------- Frame-Drop Information ----------" + "\n"  # トライアル毎のフレーム落ちの情報を記録するための変数
+        self.last_frame_num = -1
+        self.recording_start_time = datetime.datetime.now()
 
 
     def run(self):
@@ -48,18 +54,19 @@ class Saver(QThread):
         #######################
 
 
+
         #######################
         # トライアル間の時間が短い場合には、データをトライアル事にわけてディレクトリに保存することをしっぱいして、境目の画像が本来はいるべきディレクトリでないところにはいってしまうのでは？それをどう避ける。
         #######################
 
         while self.is_running or not self.data_queue.empty():
-            if self.path is None:
+            if self.trial_dir is None:
                 time.sleep(0.1)
                 continue
 
             if current_trial != self.trial_num:
                 current_trial = self.trial_num
-                trial_dir = os.path.join(self.path, str(current_trial))
+                trial_dir = os.path.join(self.trial_dir, str(current_trial))
 
                 if not os.path.exists(trial_dir):
                     try:
@@ -85,20 +92,23 @@ class Saver(QThread):
                 image_data, frame_num = self.data_queue.get(timeout=0.1)  # キューからデータを取り出す (ビジーウェイト軽減のために、タイムアウト付きでブロック)。data = (image_array, frame_number)。
 
                 # 圧縮なしデータを保存
-                row_format_filename = os.path.join(row_format_dir, f"{self.fram_in_trial_num:06d}.{ROW_FORMAT}")  # ファイル名を生成
+                row_format_filename = os.path.join(row_format_dir, f"{self.frame_in_trial_num:06d}.{ROW_FORMAT}")  # ファイル名を生成
                 cv2.imwrite(row_format_filename, image_data)  # pcoのrawデータはuint16が多く、cv2.imwriteはuint16のTIFF保存に対応しているので、OpenCVを使用。
 
                 # 画像保存
-                img_format_filename = os.path.join(img_format_dir, f"{self.fram_in_trial_num:06d}.{IMG_FORMAT}")  # ファイル名を生成
+                img_format_filename = os.path.join(img_format_dir, f"{self.frame_in_trial_num:06d}.{IMG_FORMAT}")  # ファイル名を生成
                 cv2.imwrite(img_format_filename, self._trans_img(image_data))
 
-                #######################
-                # 画像のフレーム番号を確認し続け、そこに飛びがあったら、テキストファイルにそのことを記録する。
-                # レコーディング全体を司るメモに、何トライアル目でそれがあったかを記録する。
-                #######################
+                # フレーム落ちが発生していた場合、それを記録する。
+                if self.last_frame_num == -1:  # 初期値なら何もしない。
+                    pass
+                elif frame_num - self.last_frame_num > 1:  # フレーム落ちが発生していた場合には、そのことを記録
+                    self._write_frame_out(self.frame_in_trial_num, frame_num - self.last_frame_num - 1)
+                
+                self.last_frame_num = frame_num
 
                 # 保存したフレーム数を更新
-                self.fram_in_trial_num += 1
+                self.frame_in_trial_num += 1
 
                 # タスク完了を通知 (キューの管理用)
                 self.data_queue.task_done()
@@ -117,8 +127,12 @@ class Saver(QThread):
         このメソッドが呼び出されると、インスタンス内の何トライアル目かの情報がリセットされる。
         """
 
+        self.trial_dir = None
         self.trial_num = 0
-        self.fram_in_trial_num = 0
+        self.frame_in_trial_num = 0
+        self.frame_drop_info = f"---------- Frame-Drop Information ----------" + "\n"
+        self.last_frame_num = -1
+        self.recording_start_time = datetime.datetime.now()
 
     def next_trial(self):
         """
@@ -126,27 +140,44 @@ class Saver(QThread):
         このメソッドが呼び出されると、インスタンス内の何トライアル目かの情報が更新される。
         """
 
+        self.trial_dir = None
         self.trial_num += 1
-        self.fram_in_trial_num = 0
+        self.frame_in_trial_num = 0
+        self.frame_drop_info = f"---------- Frame-Drop Information ----------" + "\n"
+        self.last_frame_num = -1
+        self.recording_start_time = datetime.datetime.now()
 
     @pyqtSlot()
-    def start_new_recording(self):
+    def start_new_recording(self, mode):
         """
         新しいレコーディングを始めるためのメソッド
         """
+
+        # 受け取ったモードを保存
+        self.experiment_mode = mode
 
         # 変数のリセット
         self.reset_trial()
 
         # レコーディングごとの保存ディレクトリを作成
-        start_time = datetime.datetime.now()
-        self.path = os.path.join(BASE_DIR, start_time.strftime('%Y%m%d%H%M%S'))
+        start_time = self.recording_start_time
+        self.trial_dir = os.path.join(BASE_DIR, start_time.strftime('%Y%m%d%H%M%S'))
 
-        if not os.path.exists(self.path):  # 保存用ディレクトリが存在しない場合は作成する。
+        if not os.path.exists(self.trial_dir):  # 保存用ディレクトリが存在しない場合は作成する。
             try:
-                os.makedirs(self.path)
+                os.makedirs(self.trial_dir)
             except OSError as e:
                 print(f"Saver Error in function \"start_new_recording\": {e}")
+
+        self.make_memo()
+
+    @pyqtSlot()
+    def end_current_recording(self):
+        """
+        現在のレコーディングを終了させるメソッド
+        """
+
+        self.end_memo()
 
     def make_memo(self):
         """
@@ -155,23 +186,23 @@ class Saver(QThread):
 
         # メモの内容を作成
         content = (
-            f"---------- Basic Information ----------"
-            f"Date and Time: {datetime.datetime.now()}" + "\n"
-            f"Recording Method: {self.a_camera_handler.camera_mode}" + "\n"
+            f"---------- Basic Information ----------" + "\n"
+            f"Date and Time: {self.recording_start_time}" + "\n"
+            f"Recording Method: {self.experiment_mode}" + "\n"
             )
-        if self.a_camera_handler.camera_mode == "program":
+        if self.experiment_mode == "program":
             content += f"    program file: {self.a_conductor.desc['file name']}" + "\n"
         content += (
             f"Camera Settings:" + "\n"
             f"    camera name: {self.a_camera_handler.desc['name']}" + "\n"
         )
-        if self.a_camera_handler.camera_mode == "manual":
+        if self.experiment_mode == "manual":
             content += (
                 f"    exposure time: not static because recording method is \"manual\"" + "\n"
                 f"    delay time: not static because recording method is \"manual\"" + "\n"
                 f"    fps: not static because recording method is \"manual\"" + "\n"
             )
-        elif self.a_camera_handler.camera_mode == "program":
+        elif self.experiment_mode == "program":
             content += (
                 f"    exposure time: {self.a_camera_handler.desc['exposure time']}" + "\n"
                 f"    delay time: {self.a_camera_handler.desc['delay time']}" + "\n"
@@ -180,19 +211,38 @@ class Saver(QThread):
         content += (
             f"    bit scale: {self.a_camera_handler.desc['bit scale']}" + "\n"
             f"" + "\n"
-            f"---------- Recording Information ----------"
         )
 
         # ファイルへの書き出し
-        memo_path = os.path.join(self.path, "memo")
+        memo_path = os.path.join(self.trial_dir, "memo.txt")
         try:
-            with open(memo_path) as f:
+            with open(memo_path, mode='w') as f:
                 f.write(content)
-
 
         except Exception as e:
             print(f"Saver Error in function \"make_memo\": {e}")
 
+    def end_memo(self):
+        """
+        別々に保存しているメモの要素を統合して一つのメモを完成させるメソッド
+        """
+
+        # 書き込む情報を作成
+        content = self.frame_drop_info + "\n"
+
+        recording_time = datetime.datetime.now() - self.recording_start_time
+        content += (
+            f"---------- End Information ----------" + "\n"
+            f"Recording Time: {recording_time}" + "\n"
+        )
+
+        # ファイルへの書き込み
+        memo_path = os.path.join(self.trial_dir, "memo.txt")
+        try:
+            with open(memo_path, mode='a') as f:
+                f.write(content)
+        except Exception as e:
+            print(f"Saver Error in function \"end_memo\": {e}")
 
     def _trans_img(self, image_data):
         """
@@ -201,10 +251,20 @@ class Saver(QThread):
         """
         
         if image_data.dtype == np.uint16:  # 形式が16bit(uint16)なら画面表示用に8bit (uint8) に変換
-            display_img = (image_data / self.a_camera_handler["bit scale"] * 255).astype(np.uint8)
+            display_img = (image_data / self.a_camera_handler.desc["bit scale"] * 255).astype(np.uint8)
         elif image_data.dtype == np.uint8:
             display_img = image_data
         else:  # その他の型の場合は正規化
             display_img = cv2.normalize(image_data, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
 
         return display_img
+
+    def _write_frame_out(self, lost_frame, frame_num):
+        """
+        memoファイルにフレーム落ち情報を記入するためのメソッド
+        lost_frameがフレーム落ちが起こる前の最後のフレーム、frame_numがフレーム落ちした枚数
+        """
+
+        content = f"{frame_num} frames lost after {lost_frame}" + "\n"
+
+        self.frame_drop_info += content

@@ -18,6 +18,8 @@ from PyQt6.QtWidgets import QApplication
 from UIer import UIer
 from CameraHandler import CameraHandler
 from Saver import Saver
+from Conductor import Conductor
+from TriggerHandler import TriggerHandler
 
 
 def run():
@@ -28,11 +30,10 @@ def run():
     
     # 各スレッドのインスタンス化
     a_camera_handler = CameraHandler(data_queue)
-    a_saver = Saver(data_queue, a_camera_handler)
-    a_window = UIer(a_camera_handler, a_saver)
-
-    # CameraHandlerの録画開始シグナルをSaverの開始メソッドに接続
-    a_camera_handler.record_started_signal.connect(a_saver.start_new_recording)
+    a_conductor = Conductor()
+    a_trigger_handler = TriggerHandler()
+    a_saver = Saver(data_queue, a_camera_handler, a_conductor)
+    a_window = UIer(a_camera_handler, a_saver, a_conductor)
     
     # スレッド開始
     a_camera_handler.start()
