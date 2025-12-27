@@ -36,7 +36,7 @@ class UIer(QMainWindow):
     time_unit_id = "ms"
 
 
-    def __init__(self, a_camera_handler, a_saver):
+    def __init__(self, a_camera_handler, a_saver, a_trigger_handler):
         """
         コンストラクタ
         """
@@ -45,6 +45,7 @@ class UIer(QMainWindow):
 
         self.a_camera_handler = a_camera_handler
         self.a_saver = a_saver
+        self.a_trigger_handler = a_trigger_handler
 
         # カウントダウン用タイマーの設定
         self.rec_timer = QTimer(self)
@@ -171,6 +172,9 @@ class UIer(QMainWindow):
         self.chk_laser2 = QCheckBox("Red Laser")
         self.chk_speaker = QCheckBox("Speaker")
         self.chk_ttl = QCheckBox("5V TTL")
+
+        # チェックボックスの操作を TriggerHandler に接続
+        self.chk_laser1.toggled.connect(self.a_trigger_handler.toggle_blue_laser)
         
         trigger_layout.addWidget(self.chk_laser1)
         trigger_layout.addWidget(self.chk_laser2)
