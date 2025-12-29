@@ -79,7 +79,7 @@ class CameraHandler(QThread):
         }
 
         # パラメータ変更を非同期処理下で安全に行うための制御変数
-        self._update_params_flag = False # パラメータ変更要求フラグ
+        self._update_params_flag = False  # パラメータ変更要求フラグ
         self.camera_mode = "shot"  # 撮影モード区別用変数"shot"が一枚撮影、"queue"がキューに保存
 
     def run(self):
@@ -115,16 +115,9 @@ class CameraHandler(QThread):
 
                     if new_frame_count > frame_count:  # 同じ画像を複数回保存しないようにする。
                         try:
-                            self.data_queue.put_nowait((image.copy(), frame_count))  # put_nowait: 待たずに登録を試みる。キューが満杯(maxsize)なら queue.Full エラーが出る。
-                        except queue.Full:
-                            ###### 後々変更！　もし実験中にqueueがいっぱいになっても、そこで実験を中断するわけにはいかない。
-                            ######そのトライアルの計測はあきらめても、直ちに立て直して実験を続行できるようにする。
-
-
-
-                            # PCをクラッシュさせないため、泣く泣くこのフレームの保存をあきらめる
-                            print(f"WARNING: Disk too slow! Dropped frame {frame_count}")
-                            self.status_signal.emit("Warning: Disk buffer full! Frames dropped.")
+                            self.data_queue.put_nowait((image.copy(), frame_count))  # 待たずに画像の登録を試みる。
+                        except queue.Full:  # queueがいっぱいなら、登録を諦める。そこで実験を中断するわけにいかないので、それは諦める。諦めたこと、どれくらいの枚数を諦めたかの記録はSaverに任せる。
+                            pass
 
                         frame_count = new_frame_count
                 

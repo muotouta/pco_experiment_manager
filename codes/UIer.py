@@ -168,18 +168,24 @@ class UIer(QMainWindow):
         self.trigger_group = QGroupBox("Trigger")
         trigger_layout = QVBoxLayout()
         
+        self.chk_ttl1 = QCheckBox("channel 1 / 5V analog out")
+        self.chk_ttl2 = QCheckBox("channel 2 / 5V analog out")
         self.chk_laser1 = QCheckBox("Blue Laser")
         self.chk_laser2 = QCheckBox("Red Laser")
         self.chk_speaker = QCheckBox("Speaker")
-        self.chk_ttl = QCheckBox("5V TTL")
 
         # チェックボックスの操作を TriggerHandler に接続
+        self.chk_ttl1.toggled.connect(self.a_trigger_handler.toggle_ttl_trigger_1)
+        self.chk_ttl2.toggled.connect(self.a_trigger_handler.toggle_ttl_trigger_2)
         self.chk_laser1.toggled.connect(self.a_trigger_handler.toggle_blue_laser)
-        
+        self.chk_laser2.toggled.connect(self.a_trigger_handler.toggle_red_laser)
+        self.chk_speaker.toggled.connect(self.a_trigger_handler.toggle_speaker)
+
+        trigger_layout.addWidget(self.chk_ttl1)
+        trigger_layout.addWidget(self.chk_ttl2)
         trigger_layout.addWidget(self.chk_laser1)
         trigger_layout.addWidget(self.chk_laser2)
         trigger_layout.addWidget(self.chk_speaker)
-        trigger_layout.addWidget(self.chk_ttl)
         
         self.trigger_group.setLayout(trigger_layout)
         panel_layout.addWidget(self.trigger_group)
