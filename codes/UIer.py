@@ -61,7 +61,6 @@ class UIer(QMainWindow):
         self.resize(1100, 700)
         self.designUI()
 
-
     def designUI(self):
         """
         UIのデザインを司るメソッド

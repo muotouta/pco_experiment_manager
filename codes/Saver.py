@@ -28,14 +28,13 @@ class Saver(QThread):
     キューに溜まった画像データをディスクに保存するクラス。
     """
 
-    def __init__(self, data_queue, a_camera_handler, a_conductor):
+    def __init__(self, data_queue, a_camera_handler):
         super().__init__()
         self.data_queue = data_queue
         self.is_running = True
         self.is_new_recording = False
 
         self.a_camera_handler = a_camera_handler
-        self.a_conductor = a_conductor
         
         # 記録を管理するための変数群
         self.experiment_mode = "manual"
@@ -46,6 +45,7 @@ class Saver(QThread):
         self.other_info = f"---------- Other Information ----------" + "\n"  # その他の情報を記録するための変数
         self.last_frame_num = -1
         self.recording_start_time = datetime.datetime.now()
+        self.conductor_program_name = "unknown"
 
 
     def run(self):
@@ -87,11 +87,11 @@ class Saver(QThread):
                 image_data, frame_num = self.data_queue.get(timeout=0.1)  # キューからデータを取り出す (ビジーウェイト軽減のために、タイムアウト付きでブロック)。data = (image_array, frame_number)。
 
                 # 圧縮なしデータを保存
-                row_format_filename = os.path.join(row_format_dir, f"{self.frame_in_trial_num:06d}_{img_time}.{ROW_FORMAT}")  # ファイル名を生成
+                row_format_filename = os.path.join(row_format_dir, f"{self.frame_in_trial_num:06d}.{ROW_FORMAT}")  # ファイル名を生成
                 cv2.imwrite(row_format_filename, image_data)  # pcoのrawデータはuint16が多く、cv2.imwriteはuint16のTIFF保存に対応しているので、OpenCVを使用。
 
                 # 画像保存
-                img_format_filename = os.path.join(img_format_dir, f"{self.frame_in_trial_num:06d}_{img_time}.{IMG_FORMAT}")  # ファイル名を生成
+                img_format_filename = os.path.join(img_format_dir, f"{self.frame_in_trial_num:06d}.{IMG_FORMAT}")  # ファイル名を生成
                 cv2.imwrite(img_format_filename, self._trans_img(image_data))
 
                 # フレーム落ちが発生していた場合、それを記録する。
@@ -180,7 +180,7 @@ class Saver(QThread):
             f"Recording Method: {self.experiment_mode}" + "\n"
             )
         if self.experiment_mode == "program":
-            content += f"    program file: {self.a_conductor.desc['file name']}" + "\n"
+            content += f"    program file: {self.conductor_program_name}" + "\n"
         content += (
             f"Camera Settings:" + "\n"
             f"    camera name: {self.a_camera_handler.desc['name']}" + "\n"
@@ -240,6 +240,13 @@ class Saver(QThread):
                 f.write(content)
         except Exception as e:
             print(f"Saver Error in function \"end_memo\": {e}")
+
+    def set_program_name(self, program_name):
+        """
+        Conductorのプログラムの名前を設定するための変数
+        """
+
+        self.conductor_program_name = program_name
 
     def _trans_img(self, image_data):
         """

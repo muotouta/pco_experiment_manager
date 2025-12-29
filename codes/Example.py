@@ -30,9 +30,9 @@ def run():
     
     # 各スレッドのインスタンス化
     a_camera_handler = CameraHandler(data_queue)
-    a_conductor = Conductor()
     a_trigger_handler = TriggerHandler()
-    a_saver = Saver(data_queue, a_camera_handler, a_conductor)
+    a_saver = Saver(data_queue, a_camera_handler)
+    a_conductor = Conductor(a_camera_handler, a_saver)
     a_window = UIer(a_camera_handler, a_saver, a_trigger_handler)
     
     # スレッド開始
@@ -44,7 +44,6 @@ def run():
 
     # 終了操作
     exit_code = app.exec()
-    a_trigger_handler.close()  # 終了時にデバイスを切断
     sys.exit(exit_code)
 
 

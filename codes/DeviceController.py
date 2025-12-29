@@ -6,8 +6,8 @@ pcoカメラによる計測用アプリケーション「pco_experiment_manager�
 """
 
 __author__ = 'Tao Muto'
-__version__ = '0.0.2'
-__date__ = '2025.12.28'
+__version__ = '0.0.4'
+__date__ = '2025.12.29'
 
 
 class DeviceController():
@@ -23,7 +23,7 @@ class DeviceController():
         self.device_type: str = None
 
         self.state: bool = False
-        self.on_functon = None
+        self.on_function = None
         self.off_function = None
 
         self.value = None
@@ -51,7 +51,7 @@ class DeviceController():
         self.state = True
 
         try:
-            self.on_functon()
+            self.on_function()
         except:
             print("DeviceContoroller Error: \"on_function\" is not defined")
 
@@ -63,7 +63,7 @@ class DeviceController():
         self.state = False
 
         try:
-            self.off_functon()
+            self.off_function()
         except:
             print("DeviceContoroller Error: \"off_function\" is not defined")
 
@@ -135,80 +135,51 @@ class DeviceController():
         else:
             tmp = self.value_unit
 
-        return tmp
-    
+        return tmp    
 
-import os
-import ctypes
 
 class Mightex_BLS_Controller(DeviceController):
     """
     Mightex BLSD Driverにより、Mightex BLS led controllerの一つのチャンネルを制御するクラス
-    Mightexが公開するライブラリのdllを、標準のpythonラッパではなく、ctypesにより制御する。それにより、Pythonバージョン非依存にするために。
+    対象機器のdllとデバイスハンドルを外部プログラムから与え、またチャンネルを指定することで、対象機器の特定のチャンネルを扱うインスタンスを得る。
+    Mightexが公開するライブラリのdllを、標準のpythonラッパではなく、ctypesにより制御する。それにより、Pythonバージョン非依存にする。
     """
 
     DISABLE_MODE = 0
     NORMAL_MODE = 1
 
-    def __init__(self, dev_id, channel):
+    def __init__(self, dll, dev_handle, channel):
         """
         コンストラクタ
         """
 
         super().__init__()
 
+        # 親クラスのフィールドを設定
         self.device_type = "Mightex BLS led controller"
-
         self.state = False
         self.on_functon = None
         self.off_function = None
-
-        self.value: int = 0
+        self.value: int = 7
         self.value_max: int = 1000
         self.value_min: int = 0
         self.value_unit = "0.1%"
 
+        # 子クラスのフィールドを設定
         self.channel = channel
-        self.dev_handle = -1
-        self.dll = None
-
-        # dllファイルの読み込み
-        dll_name = "Mightex_BLSDriver_SDK.dll"  # このファイルがクラスファイルと同じ場所にある必要がある。
-        if os.path.exists(dll_name):
-            try:
-                self.dll = ctypes.CDLL(os.path.abspath(dll_name))  # CDLLを使ってDLLをロード
-            except Exception as e:
-                print(f"Class Mightex_BLS_Controller Error in \"__init__\": Failed to load DLL. {e}")
-        else:
-            print(f"Class Mightex_BLS_Controller Error in \"__init__\": {dll_name} is not found in same directory with class file.")
-
-        # デバイスとの接続
-        try:
-            num_devices = self.dll.MTUSB_BLSDriverInitDevices()  # デバイスの初期化 (InitDevices)
-        
-            if num_devices <= 0:
-                print(f"Class Mightex_BLS_Controller Error in \"__init__\": No found Mightex device(s).")
-
-            if num_devices > 0:
-                self.dev_handle = self.dll.MTUSB_BLSDriverOpenDevice(dev_id) # デバイスをオープン。失敗すると-1が返ってくる。
-                if self.dev_handle < 0:
-                    print(f"Class Mightex_BLS_Controller Error in \"__init__\": Failed to open device {dev_id}.")
-            else:
-                print("Class Mightex_BLS_Controller in \"__init__\": No Mightex devices found.")
-
-        except Exception as e:
-            print(f"Class Mightex_BLS_Controller Error in \"__init__\": {e}")
+        self.dev_handle = dev_handle
+        self.dll = dll
 
         # このクラスを、DeviceCOntrollerクラスの関数で扱えるようにするための設定
-        self.on_function = self.analog_out_on()
-        self.off_function = self.analog_out_off()
+        self.on_function = self.analog_out_on
+        self.off_function = self.analog_out_off
 
     def analog_out_on(self):
         """
         レーザーの照射を開始するためのメソッド
         """
         # 電流値を設定
-        self.dll.MTUSB_BLSDriverSetNormalCurrent(self.dev_handle, self.channel, self.value)  # 単位は 0.1% なので、1000 = 100%, 100 = 10%
+        self.dll.MTUSB_BLSDriverSetNormalCurrent(self.dev_handle, self.channel, self.value)
         
         # モードをNORMAL(常時点灯)にする
         self.dll.MTUSB_BLSDriverSetMode(self.dev_handle, self.channel, self.NORMAL_MODE)

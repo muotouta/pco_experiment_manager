@@ -18,22 +18,24 @@ class Conductor():
     実験の遂行を司るクラス
     """
 
-    desc = {
-        'program name' : str,
-        
-    }
-
     def __init__(self, a_camera_handler, a_saver):
         """
         コンストラクタ
         """
-        self.ttl_triger_1 = Mightex_BLS_Controller(dev_id=0, channel=1)
-        self.ttl_triger_2 = Mightex_BLS_Controller(dev_id=0, channel=2)
-        self.blue_laser = Mightex_BLS_Controller(dev_id=0, channel=3)
-        self.red_laser = Mightex_BLS_Controller(dev_id=0, channel=4)
+
+        # self.ttl_triger_1 = Mightex_BLS_Controller(dll=dll_0, dev_handle=dev_handle_0, channel=1)
+        # self.ttl_triger_2 = Mightex_BLS_Controller(dll=dll_0, dev_handle=dev_handle_0, channel=2)
+        # self.blue_laser = Mightex_BLS_Controller(dll=dll_0, dev_handle=dev_handle_0, channel=3)
+        # self.red_laser = Mightex_BLS_Controller(dll=dll_0, dev_handle=dev_handle_0, channel=4)
         self.speaker = None
+
+        self.desc = {
+            'program name' : str,
+        }
+
         self.a_camera_handler = a_camera_handler
         self.a_saver = a_saver
+        self.a_saver.set_program_name(self.desc['program name'])
 
     def run(self):
         """
@@ -155,7 +157,3 @@ class Conductor():
                 value_max() / value_min : 機器がパラメータを持つ場合に、その値の最大値 / 最小値を返す。
                 value_unit() : 機器がパラメータを持つ場合に、その単位を返す。
         """""""""""""""""""""""""""""""""""""""""""""
-
-
-
-        
