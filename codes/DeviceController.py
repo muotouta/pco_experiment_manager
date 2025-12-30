@@ -10,6 +10,9 @@ __version__ = '0.0.4'
 __date__ = '2025.12.29'
 
 
+import traceback
+
+
 class DeviceController():
     """
     実験機器を表現するクラス
@@ -26,10 +29,10 @@ class DeviceController():
         self.on_function = None
         self.off_function = None
 
-        self.value = None
-        self.value_max = None
-        self.value_min = None
-        self.value_unit: str = None
+        self.value = [None, None]
+        self.value_max = [None, None]
+        self.value_min = [None, None]
+        self.value_unit = [None, None]
 
     def type(self):
         """
@@ -50,10 +53,14 @@ class DeviceController():
 
         self.state = True
 
-        try:
-            self.on_function()
-        except:
-            print("DeviceContoroller Error: \"on_function\" is not defined")
+        if self.on_function:
+            try:
+                self.on_function()
+            except Exception as e:
+                print(f"DeviceController Error in on(): {e}")
+                traceback.print_exc() 
+        else:
+            print("DeviceController Error: \"on_function\" is not defined")
 
     def off(self):
         """
@@ -62,10 +69,14 @@ class DeviceController():
 
         self.state = False
 
-        try:
-            self.off_function()
-        except:
-            print("DeviceContoroller Error: \"off_function\" is not defined")
+        if self.off_function:
+            try:
+                self.off_function()
+            except Exception as e:
+                print(f"DeviceController Error in on(): {e}")
+                traceback.print_exc() 
+        else:
+            print("DeviceController Error: \"off_function\" is not defined")
 
     def is_active(self):
         """
@@ -74,68 +85,62 @@ class DeviceController():
 
         return self.state
     
-    def set_value(self, val):
+    def set_value(self, param, val):
         """
         自身の値を引数の値に変更するメソッド
         """
 
-        if self.value is None:
+        if self.value[param] is None:
             print(f"DeveiceController Error in functon \"set_value\":  Device \"{self.device_type}\" has no numeric parameter")
         else:
-            self.value = val
+            self.value[param] = val
 
-    def current_value(self):
+    def current_value(self, param):
         """
         自身の現在の値を答えるメソッド
         値を持たないデバイスでは、Noneが返る。
         """
 
-        if self.value is None:
+        if self.value[param] is None:
             print(f"DeveiceController Error in functon \"current_value\":  Device \"{self.device_type}\" has no numeric parameter")
-            tmp = None
+            return None
         else:
-            tmp = self.value
-
-        return tmp
+            return self.value[param]
     
-    def max_value(self):
+    def max_value(self, param):
         """
         自身の最大の値を答えるメソッド
         値を持たないデバイスでは、Noneが返る。
         """
 
-        if self.value is None:
+        if self.value[param] is None:
             print(f"DeveiceController Error in functon \"max_value\":  Device \"{self.device_type}\" has no numeric parameter")
-            tmp = None
+            return None
         else:
-            tmp = self.value_max
-
-        return tmp
+            return self.value_max[param]
     
-    def min_value(self):
+    def min_value(self, param):
         """
         自身の最小の値を答えるメソッド
         値を持たないデバイスでは、Noneが返る。
         """
 
-        if self.value is None:
+        if self.value[param] is None:
             print(f"DeveiceController Error in functon \"min_value\":  Device \"{self.device_type}\" has no numeric parameter")
-            tmp = None
+            return None
         else:
-            tmp = self.value_min
+            return self.value_min[param]
 
-    def value_unit(self):
+    def unit(self, param):
         """
         自身の値の単位を答えるメソッド
         値を持たないデバイスでは、Noneが返る。
         """
-        if self.value is None:
+        if self.value[param] is None:
             print(f"DeveiceController Error in functon \"value_unit\":  Device \"{self.device_type}\" has no numeric parameter")
-            tmp = None
+            return None
         else:
-            tmp = self.value_unit
-
-        return tmp    
+            return self.value_unit[param]
 
 
 class Mightex_BLS_Controller(DeviceController):
@@ -148,7 +153,7 @@ class Mightex_BLS_Controller(DeviceController):
     DISABLE_MODE = 0
     NORMAL_MODE = 1
 
-    def __init__(self, dll, dev_handle, channel):
+    def __init__(self, dll, dev_handle, channel, param):
         """
         コンストラクタ
         """
@@ -160,12 +165,13 @@ class Mightex_BLS_Controller(DeviceController):
         self.state = False
         self.on_functon = None
         self.off_function = None
-        self.value: int = 7
-        self.value_max: int = 1000
-        self.value_min: int = 0
-        self.value_unit = "0.1%"
+        self.value[param] = 7
+        self.value_max[param] = 1000
+        self.value_min[param] = 0
+        self.value_unit[param] = "0.1%"
 
         # 子クラスのフィールドを設定
+        self.param = param
         self.channel = channel
         self.dev_handle = dev_handle
         self.dll = dll
@@ -179,7 +185,7 @@ class Mightex_BLS_Controller(DeviceController):
         レーザーの照射を開始するためのメソッド
         """
         # 電流値を設定
-        self.dll.MTUSB_BLSDriverSetNormalCurrent(self.dev_handle, self.channel, self.value)
+        self.dll.MTUSB_BLSDriverSetNormalCurrent(self.dev_handle, self.channel, int(self.value[self.param]))
         
         # モードをNORMAL(常時点灯)にする
         self.dll.MTUSB_BLSDriverSetMode(self.dev_handle, self.channel, self.NORMAL_MODE)
@@ -202,3 +208,60 @@ class Mightex_BLS_Controller(DeviceController):
         if self.dll and self.dev_handle >= 0:
             self.dll.MTUSB_BLSDriverCloseDevice(self.dev_handle)
             self.dev_handle = -1
+
+
+
+import numpy as np
+import sounddevice as sd
+
+class adafruit_3369_Controller(DeviceController):
+    """
+    adafruit 3369 をコントロールするためのクラス
+    ピッチと音量を指定することができる
+    """
+
+    DEVICE_ID = 1 # Windowsが認識するオーディオ出力先のデバイスID番号を指定する。
+
+    def __init__(self, ):
+        """
+        コンストラクタ
+        """
+
+        super().__init__()
+
+        # 親クラスのフィールドを設定
+        self.device_type = "Mightex BLS led controller"
+        self.state = False
+        self.on_functon = None
+        self.off_function = None
+        self.value[0] = 440  # value[0]はピッチ
+        self.value_max[0] = 15000
+        self.value_min[0] = 50
+        self.value_unit[0] = "Hz"
+        self.value[1] = 440  # value[1]は音量
+        self.value_max[1] = 
+        self.value_min[1] = 0
+        self.value_unit[1] = "%"
+
+        # 子クラスのフィールドを設定
+
+
+
+
+def _generate_tone(frequency, duration_sec, volume, sample_rate=44100):
+    """
+    指定された周波数と音量でサイン波を生成する関数
+    :param frequency: 周波数 (Hz) - 音の高さ
+    :param duration_sec: 再生時間 (秒)
+    :param volume: 音量 (0.0 ~ 1.0)
+    :param sample_rate: サンプリングレート
+    :return: 音声データ(numpy array)
+    """
+
+    # 時間軸の作成
+    t = np.linspace(0, duration_sec, int(sample_rate * duration_sec), endpoint=False)
+    
+    # サイン波の計算: 振幅(音量) * sin(2 * π * 周波数 * 時間)
+    waveform = volume * np.sin(2 * np.pi * frequency * t)
+    
+    return waveform

@@ -6,8 +6,8 @@ pcoカメラによる計測用アプリケーション「pco_experiment_manager�
 """
 
 __author__ = 'Tao Muto'
-__version__ = '0.1.5'
-__date__ = '2025.12.27'
+__version__ = '0.1.9'
+__date__ = '2025.12.29'
 
 
 import pco
@@ -17,8 +17,8 @@ import numpy as np
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                              QHBoxLayout, QFormLayout, QDoubleSpinBox, 
                              QPushButton, QLabel, QMessageBox, QGroupBox,
-                             QRadioButton, QButtonGroup, QWidget, QHBoxLayout,
-                             QComboBox, QCheckBox)
+                             QRadioButton, QButtonGroup, QComboBox, QCheckBox,
+                             QSizePolicy)
 from PyQt6.QtCore import QThread, pyqtSignal, pyqtSlot, Qt, QTimer
 from PyQt6.QtGui import QImage, QPixmap, QFont
 
@@ -58,7 +58,7 @@ class UIer(QMainWindow):
         self.a_camera_handler.params_updated_signal.connect(self.on_params_updated)  # カメラの設定更新シグナルの接続
 
         self.setWindowTitle("pco experiment manager")
-        self.resize(1100, 700)
+        self.resize(1100, 750) # レイアウトが増えたため少し高さを拡張
         self.designUI()
 
     def designUI(self):
@@ -84,7 +84,7 @@ class UIer(QMainWindow):
         # --- 右側: コントロールパネル ---
         panel_widget = QWidget()
         panel_layout = QVBoxLayout(panel_widget)
-        panel_widget.setFixedWidth(300)
+        panel_widget.setFixedWidth(320)
         
         # 1. パラメータ設定グループ
         self.settings_group = QGroupBox("Camera")
@@ -109,7 +109,7 @@ class UIer(QMainWindow):
         self.spin_exposure.setSingleStep(0.05)
         self.spin_exposure.setDecimals(3)
         self.spin_exposure.setValue(25)  # 初期値
-        self.spin_exposure.setSuffix(f" {self.time_unit_id}")
+        self.spin_exposure.setFixedWidth(90)
         self.spin_exposure.valueChanged.connect(self.on_exposure_changed)
 
         self.rb_exposure = QRadioButton()
@@ -135,7 +135,7 @@ class UIer(QMainWindow):
         self.spin_fps.setSingleStep(1.0)
         self.spin_fps.setDecimals(3)
         self.spin_fps.setValue(40)  # 初期値
-        self.spin_fps.setSuffix(" fps")
+        self.spin_fps.setFixedWidth(90)
         self.spin_fps.valueChanged.connect(self.on_fps_changed)
         
         self.rb_fps = QRadioButton()
@@ -164,42 +164,63 @@ class UIer(QMainWindow):
         panel_layout.addWidget(self.settings_group)
 
         # 2. トリガー設定グループ (Trigger)
-        self.trigger_group = QGroupBox("Trigger")
+        self.trigger_group = QGroupBox("Device")
         trigger_layout = QVBoxLayout()
         
-        self.chk_ttl1 = QCheckBox("channel 1 / 5V analog out")
-        self.chk_ttl2 = QCheckBox("channel 2 / 5V analog out")
-        self.chk_laser1 = QCheckBox("Blue Laser")
-        self.chk_laser2 = QCheckBox("Red Laser")
-        self.chk_speaker = QCheckBox("Speaker")
-
-        # チェックボックスの操作を TriggerHandler に接続
+        # TTL 1
+        self.chk_ttl1 = QCheckBox()
         self.chk_ttl1.toggled.connect(self.a_trigger_handler.toggle_ttl_trigger_1)
-        self.chk_ttl2.toggled.connect(self.a_trigger_handler.toggle_ttl_trigger_2)
-        self.chk_laser1.toggled.connect(self.a_trigger_handler.toggle_blue_laser)
-        self.chk_laser2.toggled.connect(self.a_trigger_handler.toggle_red_laser)
-        self.chk_speaker.toggled.connect(self.a_trigger_handler.toggle_speaker)
+        self.spin_ttl1 = self.add_trigger_row("CH1 Analog out", self.chk_ttl1, trigger_layout,
+                                         self.a_trigger_handler.ttl_triger_1,
+                                         self.a_trigger_handler.set_ttl_trigger_1_value,
+                                         0)
 
-        trigger_layout.addWidget(self.chk_ttl1)
-        trigger_layout.addWidget(self.chk_ttl2)
-        trigger_layout.addWidget(self.chk_laser1)
-        trigger_layout.addWidget(self.chk_laser2)
-        trigger_layout.addWidget(self.chk_speaker)
-        
+        # TTL 2
+        self.chk_ttl2 = QCheckBox()
+        self.chk_ttl2.toggled.connect(self.a_trigger_handler.toggle_ttl_trigger_2)
+        self.spin_ttl2 = self.add_trigger_row("CH2 Analog Out", self.chk_ttl2, trigger_layout,
+                                         self.a_trigger_handler.ttl_triger_2,
+                                         self.a_trigger_handler.set_ttl_trigger_2_value,
+                                         0)
+
+        # Blue Laser
+        self.chk_laser1 = QCheckBox()
+        self.chk_laser1.toggled.connect(self.a_trigger_handler.toggle_blue_laser)
+        self.spin_laser1 = self.add_trigger_row("Blue Laser", self.chk_laser1, trigger_layout,
+                                           self.a_trigger_handler.blue_laser,
+                                           self.a_trigger_handler.set_blue_laser_value,
+                                           0)
+
+        # Red Laser
+        self.chk_laser2 = QCheckBox()
+        self.chk_laser2.toggled.connect(self.a_trigger_handler.toggle_red_laser)
+        self.spin_laser2 = self.add_trigger_row("Red Laser", self.chk_laser2, trigger_layout,
+                                           self.a_trigger_handler.red_laser,
+                                           self.a_trigger_handler.set_red_laser_value,
+                                           0)
+
+        # Speaker
+        self.chk_speaker = QCheckBox()
+        self.chk_speaker.toggled.connect(self.a_trigger_handler.toggle_speaker)
+        self.spin_speaker = self.add_trigger_row("Speaker", self.chk_speaker, trigger_layout,
+                                    self.a_trigger_handler.speaker,
+                                    self.a_trigger_handler.set_speaker_value,
+                                    0)
+
+
         self.trigger_group.setLayout(trigger_layout)
         panel_layout.addWidget(self.trigger_group)
 
         panel_layout.addStretch()
 
-
         # 3. 録画制御グループ
         record_group = QGroupBox("Recording")
         record_layout = QVBoxLayout()
 
-        # 録画モード選択プルダウン (Startボタンの上に追加)
+        # 録画モード選択プルダウン
         self.combo_rec_mode = QComboBox()
         self.combo_rec_mode.addItems(["manual", "program"])
-        self.combo_rec_mode.setFixedHeight(30) # 少し高さを確保して押しやすく
+        self.combo_rec_mode.setFixedHeight(30)
         font_combo = QFont()
         self.combo_rec_mode.setFont(font_combo)
         record_layout.addWidget(self.combo_rec_mode)
@@ -217,7 +238,7 @@ class UIer(QMainWindow):
 
         self.lbl_countdown = QLabel("")
         self.lbl_countdown.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.lbl_countdown.setFixedHeight(40) # 高さを確保
+        self.lbl_countdown.setFixedHeight(40)
         font_cd = QFont()
         font_cd.setPointSize(24)
         font_cd.setBold(True)
@@ -231,10 +252,114 @@ class UIer(QMainWindow):
         # 余白
         main_layout.addWidget(panel_widget, stretch=1)
 
-        # 初期状態の反映（ロック状態の適用とDelay計算）
+        # 初期状態の反映
         self.toggle_inputs()
         self.update_delay_display()
 
+    @pyqtSlot(np.ndarray, dict)
+    def update_display(self, image_data, meta):
+        try:
+            label_h = self.image_label.height()
+            label_w = self.image_label.width()
+            h, w = image_data.shape
+            scale = label_h / h
+            new_w = int(w * scale)
+            new_h = int(h * scale)
+            
+            if new_w > label_w:
+                scale = label_w / w
+                new_w = int(w * scale)
+                new_h = int(h * scale)
+
+            if scale < 1.0:
+                image_data = cv2.resize(image_data, (new_w, new_h), interpolation=cv2.INTER_NEAREST)
+            
+            height, width = image_data.shape
+            q_img = QImage(image_data.data, width, height, width, QImage.Format.Format_Grayscale8)
+            self.image_label.setPixmap(QPixmap.fromImage(q_img))
+
+        except Exception as e:
+            print(f"UIer Error in function \"update_display\": {e}")
+
+    def add_trigger_row(self, label_text, checkbox, trigger_layout, device, value_setter, param):
+        """
+        トリガー設定行を生成するヘルパー関数
+        device引数からmax/min/unitを取得して表示・設定に反映する
+        """
+        # 親コンテナ (縦並び: 上段[Check, Spin], 下段[Label])
+        container = QWidget()
+        container_layout = QVBoxLayout(container)
+        container_layout.setContentsMargins(0, 0, 0, 10) # 次の行との間隔
+        container_layout.setSpacing(0)
+
+        # デバイス情報の取得 (Noneガード)
+        min_val = 0.0
+        max_val = 100.0
+        curr_val = 0.0
+        unit = ""
+        
+        if device:
+            # 最小値
+            tmp = device.min_value(param)
+            if tmp is not None: min_val = tmp
+            # 最大値
+            tmp = device.max_value(param)
+            if tmp is not None: max_val = tmp
+            # 現在値
+            tmp = device.current_value(param)
+            if tmp is not None: curr_val = tmp
+            else: curr_val = min_val # 現在値がNoneなら最小値にしておく
+            # 単位
+            tmp = device.unit(param)
+            if tmp is not None: unit = tmp
+
+        # --- 上段: チェックボックスとSpinBox ---
+        top_widget = QWidget()
+        top_layout = QHBoxLayout(top_widget)
+        top_layout.setContentsMargins(0, 0, 0, 0)
+        
+        checkbox.setText(label_text)
+        top_layout.addWidget(checkbox)
+        top_layout.addStretch()
+        
+        spin = QDoubleSpinBox()
+        spin.setRange(float(min_val), float(max_val))
+        spin.setSingleStep(1.0)
+        spin.setDecimals(1) # 小数点以下桁数 (必要に応じて0にする等調整可)
+        if int(max_val) == max_val and int(min_val) == min_val and device and unit != "%":
+             spin.setDecimals(0) # 整数のみのデバイスの場合
+             
+        spin.setValue(float(curr_val))
+        spin.setFixedWidth(90)
+        
+        # デバイスがない場合は無効化
+        if device is None:
+            spin.setEnabled(False)
+            checkbox.setEnabled(False)
+
+        spin.valueChanged.connect(value_setter)
+        top_layout.addWidget(spin)
+
+        container_layout.addWidget(top_widget)
+
+        # --- 下段: 説明ラベル (Min ~ Max (Unit)) ---
+        if device: # デバイスがある場合のみ表示
+            bottom_widget = QWidget()
+            bottom_layout = QHBoxLayout(bottom_widget)
+            bottom_layout.setContentsMargins(0, 0, 0, 0)
+            
+            desc_label = QLabel()
+            desc_label.setText(f"{min_val} ~ {max_val} ({unit})")
+            desc_label.setStyleSheet("color: #666; font-size: 11px;")
+            
+            bottom_layout.addStretch() # 右寄せ
+            bottom_layout.addWidget(desc_label)
+            
+            container_layout.addWidget(bottom_widget)
+
+        trigger_layout.addWidget(container)
+        return spin
+    
 
     # --- 操作イベントハンドラ ---
     def toggle_inputs(self):
@@ -242,39 +367,25 @@ class UIer(QMainWindow):
         ラジオボタンの状態を見て、入力欄の有効/無効を切り替える
         """
         
-        if self.rb_exposure.isChecked():  # Exposureが選択されている -> Exposure固定(入力不可)、FPS変更可
+        if self.rb_exposure.isChecked():
             self.spin_exposure.setEnabled(False)
             self.spin_fps.setEnabled(True)
-        else:  # FPSが選択されている -> FPS固定(入力不可)、Exposure変更可
+        else:
             self.spin_exposure.setEnabled(True)
             self.spin_fps.setEnabled(False)
 
-        # 切り替え時に制限値（最大値）と説明文を更新する
         self.update_limit_ranges()
 
     def on_exposure_changed(self, val):
-        """
-        Exposure変更時の処理
-        """
-
         self.a_camera_handler.set_exposure(val / self.time_unit[self.time_unit_id])
         self.update_delay_display()
-        self.update_limit_ranges()  # FPSの上限（説明文と制限）も即座に再計算して表示
+        self.update_limit_ranges()
 
     def on_fps_changed(self, val):
-        """
-        FPS変更時の処理
-        """
-
         self.update_delay_display()
-        self.update_limit_ranges()  # 値が変わったので、Exposureの上限（説明文と制限）も即座に再計算して表示する
+        self.update_limit_ranges()
 
     def update_delay_display(self):
-        """
-        現在のFPSとExposureからDelayを逆算して表示する
-        簡易的に Delay = (1/FPS) - Exposure として計算し表示
-        """
-
         try:
             fps = self.spin_fps.value()
             exposure_ms = self.spin_exposure.value()
@@ -282,16 +393,13 @@ class UIer(QMainWindow):
 
             if fps > 0:
                 frame_time_s = 1.0 / fps
-                delay_s = frame_time_s - exposure_s  # Delay = フレーム時間 - 露光時間
+                delay_s = frame_time_s - exposure_s
                 
-                # マイナスになる場合は0クリップ（またはFPS/Exposure設定が矛盾している）
                 if delay_s < 0:
                     delay_s = 0.0
                 
-                # ハンドラにセット
                 self.a_camera_handler.set_delay(delay_s)
 
-                # 表示更新
                 delay_ms = delay_s * self.time_unit[self.time_unit_id]
                 self.lbl_delay_val.setText(f"{delay_ms:.3f} {self.time_unit_id}")
 
@@ -299,75 +407,49 @@ class UIer(QMainWindow):
             print(f"Delay calc error: {e}")
     
     def update_limit_ranges(self):
-        """
-        現在の設定値に基づいて、物理的に可能な最大値を計算し、
-        入力制限と説明ラベルを更新するメソッド（安全装置付き修正版）
-        """
         try:
-            # --- 共通の定数・現在値の取得 ---
-            # 物理的な最小遅延時間（秒）
             min_delay_s = self.a_camera_handler.desc.get("min delay time", 0.0)
             
-            # ハードウェアとしての最大値（秒）
-            # もしカメラ情報が 0 や None だった場合、安全なデフォルト値(100s, 500fps)を使う
             hw_max_exp_s = self.a_camera_handler.desc.get("max exposure time", 10.0)
             if hw_max_exp_s <= 0: hw_max_exp_s = 10.0
             
             hw_max_fps = self.a_camera_handler.desc.get("max fps", 500.0)
             if hw_max_fps <= 0: hw_max_fps = 500.0
             
-            # 現在の入力値
             curr_exp_val = self.spin_exposure.value()
             curr_exp_s = curr_exp_val / self.time_unit[self.time_unit_id]
             curr_fps = self.spin_fps.value()
 
-            # --- 相互の制限値を計算 ---
-            
-            # A. 現在のExposure値における、理論上の最大FPS
             if (curr_exp_s + min_delay_s) > 0:
                 calc_max_fps = 1.0 / (curr_exp_s + min_delay_s)
             else:
                 calc_max_fps = hw_max_fps
             
-            # ハードウェア限界を超えないようにクリップ
             real_max_fps = min(hw_max_fps, calc_max_fps)
-            if real_max_fps < 0.001: real_max_fps = 0.001  # 最大値が0以下にならないようにガード
+            if real_max_fps < 0.001: real_max_fps = 0.001
 
-
-            # B. 現在のFPS値における、理論上の最大Exposure
             if curr_fps > 0:
                 calc_max_exp_s = (1.0 / curr_fps) - min_delay_s
             else:
                 calc_max_exp_s = hw_max_exp_s
             
-            # 0以下やハードウェア限界のチェック
             if calc_max_exp_s < 0: calc_max_exp_s = 0
             real_max_exp_s = min(hw_max_exp_s, calc_max_exp_s)
             
-            # 表示用に単位変換
             disp_max_exp = real_max_exp_s * self.time_unit[self.time_unit_id]
             disp_min_exp = self.a_camera_handler.desc["min exposure time"] * self.time_unit[self.time_unit_id]
 
-
-            # --- 入力フォームの制限 (SpinBox) ---
-            if self.rb_exposure.isChecked():  # Exposure固定モード（FPS可変）
+            if self.rb_exposure.isChecked():
                 fps_limit = max(real_max_fps, self.spin_fps.minimum())
                 self.spin_fps.setMaximum(fps_limit)
-                
-                # Exposure入力欄はハードウェア限界まで
                 hw_max_exp_val = hw_max_exp_s * self.time_unit[self.time_unit_id]
                 self.spin_exposure.setMaximum(hw_max_exp_val)
 
-            else:  # FPS固定モード（Exposure可変）
-                # setMaximumする値が、現在のminimumより小さいと挙動がおかしくなるためチェック
+            else:
                 exp_limit = max(disp_max_exp, self.spin_exposure.minimum())
                 self.spin_exposure.setMaximum(exp_limit)
-                
-                # FPS入力欄はハードウェア限界まで
                 self.spin_fps.setMaximum(hw_max_fps)
 
-
-            # --- 説明ラベルの更新 (Label) ---
             self.description_exposure.setText(f"{disp_min_exp:.3f} ~ {disp_max_exp:.3f} ({self.time_unit_id})")
             self.description_fps.setText(f"~  {real_max_fps:.3f} (fps)")
 
@@ -375,159 +457,79 @@ class UIer(QMainWindow):
             print(f"Update limit ranges error: {e}")
 
     def on_params_updated(self):
-        """
-        CameraHandlerで設定が反映された後、その実際の値を取得してUIを更新する
-        """
         try:
-            # カメラ側の真の値を取得 (単位は秒なので、UIに合わせて変換)
             true_exp_val = self.a_camera_handler.desc["exposure time"] * self.time_unit[self.time_unit_id]
             true_delay_val = self.a_camera_handler.desc["delay time"] * self.time_unit[self.time_unit_id]
             true_fps_val = self.a_camera_handler.desc["fps"]
             
-            # --- Delayラベルの更新 ---
             self.lbl_delay_val.setText(f"{true_delay_val:.3f} {self.time_unit_id}")
 
-            # --- 入力フォームの更新 ---
-            # 「入力が終わったタイミング」＝「フォーカスが外れている」または「操作不可(ロック中)」のときのみ更新する
-            # 入力中に勝手に数値が変わると操作しにくいため。
-
-            # Exposureの更新
             if not self.spin_exposure.hasFocus() or not self.spin_exposure.isEnabled():
-                self.spin_exposure.blockSignals(True) # 無限ループ防止（値セットでvalueChangedが呼ばれないようにする）
+                self.spin_exposure.blockSignals(True)
                 self.spin_exposure.setValue(true_exp_val)
                 self.spin_exposure.blockSignals(False)
 
-            # FPSの更新 (FPSはHandler側で丸め処理をしていない場合はそのままですが、念のため)
-            # 必要であれば desc["fps"] も CameraHandler側で更新するように実装してください
             if not self.spin_fps.hasFocus() or not self.spin_fps.isEnabled():
-                self.spin_fps.blockSignals(True) # 無限ループ防止（値セットでvalueChangedが呼ばれないようにする）
+                self.spin_fps.blockSignals(True)
                 self.spin_fps.setValue(true_fps_val)
                 self.spin_fps.blockSignals(False)
 
-            # 値が確定したので、それに基づいて制限範囲も再計算して表示を更新する
             self.update_limit_ranges()
 
         except Exception as e:
             print(f"UIer Error in function \"on_params_updated\": {e}")
         
     def on_record_toggled(self, checked):
-        if checked:  # Startボタン押下
-            # UIロック
+        if checked:
             self.combo_rec_mode.setEnabled(False)
             if self.combo_rec_mode.currentText() == "program":
                 self.settings_group.setEnabled(False)
                 self.trigger_group.setEnabled(False)
             
-            # カウントダウン準備
             self.countdown_val = 3
-
-            # カウントダウン数字用フォント設定
             font = self.lbl_countdown.font()
             font.setPointSize(16)
             self.lbl_countdown.setFont(font)
             
-            # ボタンの表示変更
-            self.btn_record.setText("Cancel") # ボタンは "Cancel" に
-            self.lbl_countdown.setText(str(self.countdown_val)) # 下のスペースに数字表示
+            self.btn_record.setText("Cancel")
+            self.lbl_countdown.setText(str(self.countdown_val))
             
-            # タイマースタート
             self.rec_timer.start()
-        else:  # Stopボタン押下、またはカウントダウン中のキャンセル
-            # 録画中だった場合のみ、Saverの終了処理を呼ぶ
-            if not self.rec_timer.isActive():  # rec_timerが動いていないということはカウントダウンは既に終わっていることを意味し、これは録画中であることを意味する。
+        else:
+            if not self.rec_timer.isActive():
                 self.a_saver.end_current_recording()
 
-            # タイマー停止（カウントダウン中のキャンセルの場合）
             self.rec_timer.stop()
-
-            # "REC" や数字の表示を消去する
             self.lbl_countdown.clear()
-            
-            # カウントダウン表示をクリア
-            self.lbl_countdown.clear()
-
-            # ボタン表示を "Start" に戻す
             self.btn_record.setText("Start")
             self.btn_record.setStyleSheet("")
-
-            # UIロック解除
             self.combo_rec_mode.setEnabled(True)
             self.settings_group.setEnabled(True)
             self.trigger_group.setEnabled(True)
             self.toggle_inputs()
 
-            # 録画停止処理
             self.a_camera_handler.set_camera_mode("shot")
             self.a_camera_handler.stop_recording()
 
     def on_countdown_tick(self):
-        """
-        タイマーによって1秒ごとに呼ばれるメソッド
-        """
         self.countdown_val -= 1
         
-        if self.countdown_val > 0:  # カウントダウン継続中は数字を更新
+        if self.countdown_val > 0:
             self.lbl_countdown.setText(str(self.countdown_val))
-        else:  # カウントダウン終了後、実際の録画を開始
-            self.rec_timer.stop() # カウントダウンが0になったので、タイマー停止
-
-            # "REC" 表示用フォント設定
+        else:
+            self.rec_timer.stop()
             font = self.lbl_countdown.font()
             font.setPointSize(14)
             self.lbl_countdown.setFont(font)
-            
-            # 表示を "REC" に切り替える
             self.lbl_countdown.setText("REC")
-            
-            # ボタンを "Stop" に変更
             self.btn_record.setText("Stop")
             self.btn_record.setStyleSheet("background-color: #ffcccc; color: red; font-weight: bold;")
             
-            # その後に録画開始の実処理を行う
             try:
                 current_mode = self.combo_rec_mode.currentText()
-                self.a_saver.start_new_recording(current_mode)  # 現在のプルダウンの選択値を取得してSaverに渡す。
+                self.a_saver.start_new_recording(current_mode)
                 self.a_camera_handler.set_camera_mode("queue")
                 self.a_camera_handler.start_recording()
             except Exception as e:
-                self.lbl_countdown.setText("Error") # エラー表示
+                self.lbl_countdown.setText("Error")
                 print(f"UIer Error in function \"on_countdown_tick\": {e}")
-
-    @pyqtSlot(np.ndarray, dict)
-    def update_display(self, image_data, meta):
-        """
-        カメラからのイベント発生を受け付け、それとともに送られてくる画像をGUIに反映するメソッド
-        """
-
-        try:
-            # ラベルのサイズを取得（ウィンドウサイズに合わせて変動）
-            label_h = self.image_label.height()
-            label_w = self.image_label.width()
-            
-            # 現在の画像サイズ
-            h, w = image_data.shape
-            
-            # アスペクト比を維持して、ラベルの高さに合わせる
-            scale = label_h / h
-            new_w = int(w * scale)
-            new_h = int(h * scale)
-            
-            # もし横幅がはみ出るなら、横幅に合わせて再計算
-            if new_w > label_w:
-                scale = label_w / w
-                new_w = int(w * scale)
-                new_h = int(h * scale)
-
-            # OpenCVでリサイズ (INTER_NEARESTは画質は粗いが最速。綺麗にしたいならINTER_LINEAR)
-            if scale < 1.0: # 画像が画面より大きい場合のみリサイズ
-                image_data = cv2.resize(image_data, (new_w, new_h), interpolation=cv2.INTER_NEAREST)
-            
-            # 3. QImage変換
-            height, width = image_data.shape
-            q_img = QImage(image_data.data, width, height, width, QImage.Format.Format_Grayscale8)
-            
-            # 4. 表示
-            self.image_label.setPixmap(QPixmap.fromImage(q_img))
-
-        except Exception as e:
-            print(f"UIer Error in function \"update_display\": {e}")

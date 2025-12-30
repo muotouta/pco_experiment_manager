@@ -27,10 +27,10 @@ class TriggerHandler():
 
         dll_0, dev_handle_0 = self._get_Mightex_BLS_led_controller(dev_id=0)  # 一つめのMightex BLS led controllerを引数で指
 
-        self.ttl_triger_1 = Mightex_BLS_Controller(dll=dll_0, dev_handle=dev_handle_0, channel=1)
-        self.ttl_triger_2 = Mightex_BLS_Controller(dll=dll_0, dev_handle=dev_handle_0, channel=2)
-        self.blue_laser = Mightex_BLS_Controller(dll=dll_0, dev_handle=dev_handle_0, channel=3)
-        self.red_laser = Mightex_BLS_Controller(dll=dll_0, dev_handle=dev_handle_0, channel=4)
+        self.ttl_triger_1 = Mightex_BLS_Controller(dll=dll_0, dev_handle=dev_handle_0, channel=1, param=0)
+        self.ttl_triger_2 = Mightex_BLS_Controller(dll=dll_0, dev_handle=dev_handle_0, channel=2, param=0)
+        self.blue_laser = Mightex_BLS_Controller(dll=dll_0, dev_handle=dev_handle_0, channel=3, param=0)
+        self.red_laser = Mightex_BLS_Controller(dll=dll_0, dev_handle=dev_handle_0, channel=4, param=0)
         self.speaker = None
 
     # --- 各チャンネル操作用メソッド ---
@@ -84,6 +84,28 @@ class TriggerHandler():
         else:
             self.speaker.off()
 
+    def set_ttl_trigger_1_value(self, val):
+        self.ttl_triger_1.set_value(self.ttl_triger_1.param, val)
+        if self.ttl_triger_1.is_active(): self.ttl_triger_1.on()
+
+    def set_ttl_trigger_2_value(self, val):
+        self.ttl_triger_2.set_value(self.ttl_triger_2.param, val)
+        if self.ttl_triger_2.is_active(): self.ttl_triger_2.on()
+
+    def set_blue_laser_value(self, val):
+        self.blue_laser.set_value(self.blue_laser.param, val)
+        if self.blue_laser.is_active(): self.blue_laser.on()
+
+    def set_red_laser_value(self, val):
+        self.red_laser.set_value(self.red_laser.param, val)
+        if self.red_laser.is_active(): self.red_laser.on()
+
+    def set_speaker_value(self, val):
+        if self.speaker is None: return
+        self.speaker.set_value(val)
+        if self.speaker.is_active(): self.speaker.on()
+
+    #  --- 内部メソッド ---
     def _get_Mightex_BLS_led_controller(self, dev_id):
         """
         Mightex BLS led controllerのdllとデバイスハンドルを求めるメソッド
