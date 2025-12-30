@@ -13,6 +13,7 @@ __date__ = '2025.12.29'
 import os
 import ctypes
 from DeviceController import Mightex_BLS_Controller
+from DeviceController import adafruit_3369_Controller
 
 
 class TriggerHandler():
@@ -31,7 +32,7 @@ class TriggerHandler():
         self.ttl_triger_2 = Mightex_BLS_Controller(dll=dll_0, dev_handle=dev_handle_0, channel=2, param=0)
         self.blue_laser = Mightex_BLS_Controller(dll=dll_0, dev_handle=dev_handle_0, channel=3, param=0)
         self.red_laser = Mightex_BLS_Controller(dll=dll_0, dev_handle=dev_handle_0, channel=4, param=0)
-        self.speaker = None
+        self.speaker = adafruit_3369_Controller()
 
     # --- 各チャンネル操作用メソッド ---
     def toggle_ttl_trigger_1(self, is_on: bool):
@@ -100,9 +101,14 @@ class TriggerHandler():
         self.red_laser.set_value(self.red_laser.param, val)
         if self.red_laser.is_active(): self.red_laser.on()
 
-    def set_speaker_value(self, val):
+    def set_speaker_value_pitch(self, val):
         if self.speaker is None: return
-        self.speaker.set_value(val)
+        self.speaker.set_value(0, val)
+        if self.speaker.is_active(): self.speaker.on()
+
+    def set_speaker_value_volume(self, val):
+        if self.speaker is None: return
+        self.speaker.set_value(1, val)
         if self.speaker.is_active(): self.speaker.on()
 
     #  --- 内部メソッド ---

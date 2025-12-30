@@ -202,10 +202,23 @@ class UIer(QMainWindow):
         # Speaker
         self.chk_speaker = QCheckBox()
         self.chk_speaker.toggled.connect(self.a_trigger_handler.toggle_speaker)
+        
+        # ピッチ (Parameter 0)
         self.spin_speaker = self.add_trigger_row("Speaker", self.chk_speaker, trigger_layout,
                                     self.a_trigger_handler.speaker,
-                                    self.a_trigger_handler.set_speaker_value,
-                                    0)
+                                    self.a_trigger_handler.set_speaker_value_pitch,
+                                    0, 0)
+
+        # 音量 (Parameter 1)
+        self.spin_speaker_vol = self.add_sub_parameter_row("", trigger_layout,
+                                    self.a_trigger_handler.speaker,
+                                    self.a_trigger_handler.set_speaker_value_volume,
+                                    1)
+
+        self.trigger_group.setLayout(trigger_layout)
+        panel_layout.addWidget(self.trigger_group)
+        
+        
 
 
         self.trigger_group.setLayout(trigger_layout)
@@ -281,7 +294,7 @@ class UIer(QMainWindow):
         except Exception as e:
             print(f"UIer Error in function \"update_display\": {e}")
 
-    def add_trigger_row(self, label_text, checkbox, trigger_layout, device, value_setter, param):
+    def add_trigger_row(self, label_text, checkbox, trigger_layout, device, value_setter, param, margin_bottom=10):
         """
         トリガー設定行を生成するヘルパー関数
         device引数からmax/min/unitを取得して表示・設定に反映する
@@ -289,7 +302,7 @@ class UIer(QMainWindow):
         # 親コンテナ (縦並び: 上段[Check, Spin], 下段[Label])
         container = QWidget()
         container_layout = QVBoxLayout(container)
-        container_layout.setContentsMargins(0, 0, 0, 10) # 次の行との間隔
+        container_layout.setContentsMargins(0, 0, 0, margin_bottom) # 次の行との間隔
         container_layout.setSpacing(0)
 
         # デバイス情報の取得 (Noneガード)
@@ -360,6 +373,70 @@ class UIer(QMainWindow):
         trigger_layout.addWidget(container)
         return spin
     
+    def add_sub_parameter_row(self, label_text, parent_layout, device, value_setter, param):
+        """
+        チェックボックスを持たない、従属パラメータ用の入力行を追加するヘルパー関数
+        """
+        # 親コンテナ
+        container = QWidget()
+        container_layout = QVBoxLayout(container)
+        container_layout.setContentsMargins(20, 0, 0, 10) # 左に20pxインデントをつける
+        container_layout.setSpacing(0)
+
+        # デバイス情報の取得
+        min_val, max_val, curr_val, unit = 0.0, 100.0, 0.0, ""
+        if device:
+            min_val = device.min_value(param) if device.min_value(param) is not None else 0.0
+            max_val = device.max_value(param) if device.max_value(param) is not None else 100.0
+            curr_val = device.current_value(param) if device.current_value(param) is not None else min_val
+            unit = device.unit(param) if device.unit(param) is not None else ""
+
+        # --- 上段: ラベルとSpinBox ---
+        top_widget = QWidget()
+        top_layout = QHBoxLayout(top_widget)
+        top_layout.setContentsMargins(0, 0, 0, 0)
+        
+        lbl = QLabel(label_text)
+        top_layout.addWidget(lbl)
+        top_layout.addStretch()
+        
+        spin = QDoubleSpinBox()
+        spin.setRange(float(min_val), float(max_val))
+        spin.setSingleStep(1.0) # 音量は整数ステップが見やすい
+        
+        # 小数点以下の表示制御 (単位が % の場合などは整数表示が見やすい)
+        if int(max_val) == max_val and int(min_val) == min_val:
+             spin.setDecimals(0)
+             
+        spin.setValue(float(curr_val))
+        spin.setFixedWidth(90)
+        
+        if device is None:
+            spin.setEnabled(False)
+
+        spin.valueChanged.connect(value_setter)
+        top_layout.addWidget(spin)
+
+        container_layout.addWidget(top_widget)
+
+        # --- 下段: 説明ラベル ---
+        if device:
+            bottom_widget = QWidget()
+            bottom_layout = QHBoxLayout(bottom_widget)
+            bottom_layout.setContentsMargins(0, 0, 0, 0)
+            
+            desc_label = QLabel()
+            desc_label.setText(f"{min_val} ~ {max_val} ({unit})")
+            desc_label.setStyleSheet("color: #666; font-size: 11px;")
+            
+            bottom_layout.addStretch()
+            bottom_layout.addWidget(desc_label)
+            
+            container_layout.addWidget(bottom_widget)
+
+        parent_layout.addWidget(container)
+        return spin
+
 
     # --- 操作イベントハンドラ ---
     def toggle_inputs(self):
