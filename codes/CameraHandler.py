@@ -3,11 +3,12 @@
 
 """
 pcoカメラによる計測用アプリケーション「pco_experiment_manager」のカメラ制御周りの機能を実装するファイル
+修正版: 録画フラグとスレッド生存フラグの分離、バッファオーバーフロー検知機能追加
 """
 
 __author__ = 'Tao Muto'
-__version__ = '0.1.2'
-__date__ = '2025.12.26'
+__version__ = '0.1.5' # Version updated for fix
+__date__ = '2025.12.31'
 
 
 import pco
@@ -17,6 +18,8 @@ import time
 import cv2
 from PyQt6.QtCore import QThread, pyqtSignal, pyqtSlot, Qt, QTimer
 
+
+SAVE_SECOND = 60  # pcoカメラの撮影の、リングバッファのサイズ。SAVE_SECOND秒分は保存するようにする。
 
 class CameraHandler(QThread):
     """
@@ -53,8 +56,12 @@ class CameraHandler(QThread):
 
         super().__init__()
         self.data_queue = data_queue
-        self.is_running = True
-        self.is_recording = False # 録画中かどうかのフラグ
+        
+        # --- 修正: フラグの役割分担 ---
+        self.is_running = True     # スレッド自体の生存フラグ (アプリ終了までTrue)
+        self.is_recording = False  # データの保存を行うかどうかのフラグ (トライアル中のみTrue)
+
+        self.current_trial_id = 0  # トライアルID(現在が何トライアル目かを表す番号)を保存するための変数
 
 
         # カメラを設定
@@ -87,45 +94,127 @@ class CameraHandler(QThread):
             self.a_cam.configuration = {'timestamp': 'binary'}
             self._apply_camera_settings(self.a_cam)
 
-            # リングバッファで録画開始
-            buffer_size = int(self.desc["fps"])
-            if buffer_size < 1: buffer_size = 1 # 安全策
-            self.a_cam.record(mode='ring buffer', number_of_images=int(self.desc["fps"]))  # 1秒分は保存するようにリングバッファのサイズを設定
-            self.a_cam.wait_for_first_image()
-            frame_count = -1
+            # リングバッファの設定
+            req_buffer_size = int(self.desc["fps"] * SAVE_SECOND)
+            if req_buffer_size < 1: req_buffer_size = 1
+            
+            # デバッグ用: 実際に要求するサイズを表示
+            # print(f"DEBUG: Calculated Buffer Size = {req_buffer_size}")
 
+            self.a_cam.record(mode='ring buffer', number_of_images=req_buffer_size)
+            
+            # pcoライブラリが要求通りのサイズを確保したと仮定
+            buffer_size = req_buffer_size
+
+            # 最初の画像を待つ
+            try:
+                if hasattr(self.a_cam, 'wait_for_first_image'):
+                    self.a_cam.wait_for_first_image()
+                else:
+                    time.sleep(0.5)
+            except Exception as e:
+                print(f"Wait First Image Warning: {e}")
+
+            # 最初の1フレームを取得して初期化
+            last_processed_frame_count = -1
+            try:
+                image, meta = self.a_cam.image(data_format=self.DATA_FORMAT, image_index=-1)
+                
+                display_img = self._trans_img(image)
+                self.new_frame_signal.emit(display_img, meta)
+                
+                last_processed_frame_count = meta['recorder image number']
+                
+            except Exception as e:
+                print(f"CameraHandler Error in \"run\" while first frame fetch: {e}")
+
+            # --- メインループ ---
+            # 修正: is_running (スレッド生存フラグ) でループを回す
             while self.is_running:
-                # パラメータの変更が要請されていたらそれを反映する。
                 if self._update_params_flag:
                     self._apply_camera_settings(self.a_cam)
                     self._update_params_flag = False
 
-                # 画像取得
-                image, meta = self.a_cam.image(data_format=self.DATA_FORMAT, image_index=-1)
-                new_frame_count = meta['recorder image number']
+                time.sleep(0.001) # ポーリング間隔
 
-                # 撮影モードに合わせて画像の扱いを変更
-                if self.camera_mode == "shot":
-                    display_img = self._trans_img(image)
-                    self.new_frame_signal.emit(display_img, meta)
+                try:
+                    # 最新画像の情報を取得
+                    latest_image, latest_meta = self.a_cam.image(data_format=self.DATA_FORMAT, image_index=-1)
+                    current_cam_frame_count = latest_meta['recorder image number']
+                    
+                    if current_cam_frame_count <= last_processed_frame_count:
+                        continue
+
+                    # 未処理分の回収ループ
+                    start_frame = last_processed_frame_count + 1
+                    
+                    # --- バッファオーバーフロー検知 ---
+                    if current_cam_frame_count - start_frame > buffer_size:
+                        dropped_count = current_cam_frame_count - start_frame - buffer_size
+                        # print(f"[BUFFER OVERFLOW] Skipped {dropped_count} frames! BufferSize: {buffer_size}")
+                        # 救出可能な最古のフレームまでインデックスを進める
+                        start_frame = current_cam_frame_count - buffer_size + 1
+
+                    for f_num in range(start_frame, current_cam_frame_count + 1):
+                        
+                        # 最新画像の場合
+                        if f_num == current_cam_frame_count:
+                            target_image = latest_image
+                            target_meta = latest_meta
+                        else:
+                            # 過去画像の場合：インデックスを計算して取得
+                            b_idx = (f_num - 1) % buffer_size
+                            try:
+                                target_image, target_meta = self.a_cam.image(data_format=self.DATA_FORMAT, image_index=b_idx)
+                                
+                                # --- 整合性チェックと詳細ログ ---
+                                rec_num = target_meta['recorder image number']
+                                if rec_num != f_num:
+                                    # ここでログが出る場合、バッファサイズの認識ズレか、インデックス計算の不一致
+                                    # print(f"[CRITICAL DROP] Want: {f_num}, Got: {rec_num} (Diff: {rec_num - f_num}), Index: {b_idx}")
+                                    continue 
+
+                            except Exception as e:
+                                print(f"[FETCH ERROR] Index: {b_idx}, Error: {e}")
+                                continue
+
+                        # --- 処理実行 ---
+                        if self.camera_mode == "shot":
+                            if f_num == current_cam_frame_count:
+                                display_img = self._trans_img(target_image)
+                                self.new_frame_signal.emit(display_img, target_meta)
+                        
+                        elif self.camera_mode == "queue":
+                            # 画面更新は間引く
+                            if f_num % 2 == 0: 
+                                display_img = self._trans_img(target_image)
+                                self.new_frame_signal.emit(display_img, target_meta)
+
+                            # 修正: 録画中 (is_recording) の場合のみキューに入れる
+                            if self.is_recording:
+                                try:
+                                    self.data_queue.put_nowait((target_image.copy(), f_num, self.current_trial_id))
+                                except queue.Full:
+                                    print(f"QUEUE FULL ERROR: Frame {f_num} dropped!")
+                                    pass
+                            else:
+                                # 録画中でなければ何もしない（捨てる）
+                                pass
+                    
+                    last_processed_frame_count = current_cam_frame_count
                 
-                elif self.camera_mode == "queue":
-                    display_img = self._trans_img(image)
-                    self.new_frame_signal.emit(display_img, meta)  # GUIに画像を送る。
-
-                    if new_frame_count > frame_count:  # 同じ画像を複数回保存しないようにする。
-                        try:
-                            self.data_queue.put_nowait((image.copy(), frame_count))  # 待たずに画像の登録を試みる。
-                        except queue.Full:  # queueがいっぱいなら、登録を諦める。そこで実験を中断するわけにいかないので、それは諦める。諦めたこと、どれくらいの枚数を諦めたかの記録はSaverに任せる。
-                            pass
-
-                        frame_count = new_frame_count
-                
-            self.a_cam.stop()
+                except Exception as e:
+                    print(f"CameraHandler Error in \"run\": {e}")
+                    continue
+            
+            # ループを抜けたら停止
+            if self.a_cam:
+                self.a_cam.stop()
+                print("Camera Stopped.")
                 
         except Exception as e:
             self.status_signal.emit(f"Camera Error: {e}")
-            print(f"CameraWorker Error in function \"run\": {e}")
+            print(f"CameraHandler Error in function \"run\": {e}")
 
     def _apply_camera_settings(self, cam):
         """
@@ -148,6 +237,12 @@ class CameraHandler(QThread):
         except Exception as e:
             print(f"CameraHandler Error: {e}")
 
+    def set_trial_id(self, trial_id):
+        """
+        トライアルIDを外部からセットするメソッド
+        """
+
+        self.current_trial_id = trial_id
 
     # --- GUIから操作するためのスロット群 ---
     def set_exposure(self, value):
@@ -166,15 +261,29 @@ class CameraHandler(QThread):
         self.camera_mode = value
 
     def start_recording(self):
+        """
+        録画開始: is_recordingフラグを立てる。
+        スレッド自体はrunで回り続けているので、フラグを変えるだけでよい。
+        """
         self.is_recording = True
         self.record_started_signal.emit()  # 録画開始シグナルを発信
+        print("Recording Started.")
 
     def stop_recording(self):
+        """
+        録画停止: is_recordingフラグを下ろす。
+        スレッドは停止させない。
+        """
         self.is_recording = False
+        print("Recording Stopped.")
 
     def stop(self):
-        self.is_running = False
-        self.wait()
+        """
+        アプリケーション終了用: スレッド自体を停止させる
+        """
+        self.is_recording = False
+        self.is_running = False # ループを抜けるように指示
+        self.wait() # スレッドの完全停止を待つ
 
 
     def _trans_img(self, image_data):

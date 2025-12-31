@@ -23,6 +23,21 @@ from PyQt6.QtCore import QThread, pyqtSignal, pyqtSlot, Qt, QTimer
 from PyQt6.QtGui import QImage, QPixmap, QFont
 
 
+class ExperimentWorker(QThread):
+    """
+    Conductorを別スレッドで動かすためのワーカークラス
+    """
+    
+    finished_signal = pyqtSignal()
+
+    def __init__(self, conductor):
+        super().__init__()
+        self.conductor = conductor
+
+    def run(self):
+        # Conductorのrunメソッドを実行。完了するか中断されるまでブロックする。
+        self.conductor.run()
+
 class UIer(QMainWindow):
     """
     UIを司るクラス
@@ -36,7 +51,7 @@ class UIer(QMainWindow):
     time_unit_id = "ms"
 
 
-    def __init__(self, a_camera_handler, a_saver, a_trigger_handler):
+    def __init__(self, a_camera_handler, a_saver, a_trigger_handler, a_conductor=None):
         """
         コンストラクタ
         """
@@ -46,6 +61,7 @@ class UIer(QMainWindow):
         self.a_camera_handler = a_camera_handler
         self.a_saver = a_saver
         self.a_trigger_handler = a_trigger_handler
+        self.a_conductor = a_conductor
 
         # カウントダウン用タイマーの設定
         self.rec_timer = QTimer(self)
@@ -236,6 +252,7 @@ class UIer(QMainWindow):
         self.combo_rec_mode.setFixedHeight(30)
         font_combo = QFont()
         self.combo_rec_mode.setFont(font_combo)
+        self.combo_rec_mode.currentTextChanged.connect(self.on_rec_mode_changed)  # 変更があったら on_rec_mode_changed
         record_layout.addWidget(self.combo_rec_mode)
         
         self.btn_record = QPushButton("Start")
@@ -437,6 +454,48 @@ class UIer(QMainWindow):
         parent_layout.addWidget(container)
         return spin
 
+    def closeEvent(self, event):
+        """
+        ウィンドウの「×」ボタンが押されたときに呼ばれるイベントハンドラ
+        """
+
+        # タイマー停止
+        if self.rec_timer.isActive():
+            self.rec_timer.stop()
+
+        # Conductorの停止
+        if self.a_conductor:
+            self.a_conductor.is_running = False
+        
+        # 録画の停止
+        if self.a_camera_handler:
+            try:
+                self.a_camera_handler.stop_recording()
+                self.a_camera_handler.stop() # スレッド停止
+            except Exception as e:
+                print(f"UIer Error in \"closeEvent\": {e}")
+
+        # Saverの停止
+        if self.a_saver:
+            try:
+                self.a_saver.stop()
+               
+                # もしキューにデータが残っていれば、保存中であることをユーザーに伝える
+                if not self.a_saver.data_queue.empty():
+                    self.lbl_countdown.setText("Saving...") # 画面に表示
+                    QApplication.processEvents()  # wait()すると画面がフリーズして「Saving...」が表示されないことがあるため、強制的に描画イベントを処理させる
+
+                self.a_saver.wait()
+            except Exception as e:
+                print(f"UIer Error in \"closeEvent\": {e}")
+
+        # 実験機器の強制OFF
+        if self.a_trigger_handler:
+            self.a_trigger_handler.close_all()
+
+        # ウィンドウを閉じる処理を受け入れる
+        event.accept()
+
 
     # --- 操作イベントハンドラ ---
     def toggle_inputs(self):
@@ -558,6 +617,7 @@ class UIer(QMainWindow):
         
     def on_record_toggled(self, checked):
         if checked:
+            current_mode = self.combo_rec_mode.currentText().strip() # 空白除去を追加
             self.combo_rec_mode.setEnabled(False)
             if self.combo_rec_mode.currentText() == "program":
                 self.settings_group.setEnabled(False)
@@ -580,13 +640,17 @@ class UIer(QMainWindow):
             self.lbl_countdown.clear()
             self.btn_record.setText("Start")
             self.btn_record.setStyleSheet("")
+
+            # プルダウンを有効化した後、現在のモードに合わせて入力欄の状態を更新
             self.combo_rec_mode.setEnabled(True)
-            self.settings_group.setEnabled(True)
-            self.trigger_group.setEnabled(True)
-            self.toggle_inputs()
+            self.on_rec_mode_changed(self.combo_rec_mode.currentText()) 
 
             self.a_camera_handler.set_camera_mode("shot")
             self.a_camera_handler.stop_recording()
+
+            # プログラム実行中の場合、Conductorを停止させる
+            if self.a_conductor and self.a_conductor.is_running:
+                self.a_conductor.is_running = False  # Conductor側のwaitループを抜けさせる。スレッドが終了するのを待つ必要があれば wait() を呼ぶが、GUIをブロックしないよう、ここではフラグを折るだけにする
 
     def on_countdown_tick(self):
         self.countdown_val -= 1
@@ -598,15 +662,60 @@ class UIer(QMainWindow):
             font = self.lbl_countdown.font()
             font.setPointSize(14)
             self.lbl_countdown.setFont(font)
-            self.lbl_countdown.setText("REC")
-            self.btn_record.setText("Stop")
-            self.btn_record.setStyleSheet("background-color: #ffcccc; color: red; font-weight: bold;")
             
-            try:
-                current_mode = self.combo_rec_mode.currentText()
-                self.a_saver.start_new_recording(current_mode)
-                self.a_camera_handler.set_camera_mode("queue")
-                self.a_camera_handler.start_recording()
-            except Exception as e:
-                self.lbl_countdown.setText("Error")
-                print(f"UIer Error in function \"on_countdown_tick\": {e}")
+            # 空白を除去してモードを取得
+            current_mode = self.combo_rec_mode.currentText().strip()
+
+            # --- "program" モードの場合 ---
+            if current_mode == "program":
+                if self.a_conductor:
+                    self.lbl_countdown.setText("RUN") # 表示をRUNに変更
+                    self.btn_record.setText("Stop")
+                    self.btn_record.setStyleSheet("background-color: #ffcccc; color: red; font-weight: bold;")
+
+                    # スレッドを作成してConductorを実行
+                    self.program_thread = ExperimentWorker(self.a_conductor)
+                    self.program_thread.finished.connect(self.on_program_finished)
+                    self.program_thread.start()
+                else:
+                    # Conductorが渡されていない場合のエラー表示
+                     self.lbl_countdown.setText("No Conductor")
+                     self.btn_record.setChecked(False) # ボタンを戻してキャンセル扱いにする
+
+            # --- "manual" モードなどの場合（既存の処理） ---
+            else:
+                self.lbl_countdown.setText("REC")
+                self.btn_record.setText("Stop")
+                self.btn_record.setStyleSheet("background-color: #ffcccc; color: red; font-weight: bold;")
+                
+                try:
+                    self.a_saver.start_new_recording(current_mode)
+                    self.a_camera_handler.set_camera_mode("queue")
+                    self.a_camera_handler.start_recording()
+                except Exception as e:
+                    self.lbl_countdown.setText("Error")
+                    print(f"UIer Error in function \"on_countdown_tick\": {e}")
+    
+    def on_program_finished(self):
+        """
+        Conductorの実行が終わったときに呼ばれる関数
+        """
+
+        # Startボタンの状態を解除（＝Stop扱いにする）ことで、on_record_toggled(False) が呼ばれ
+        # 録画停止やGUIのリセットが行われる
+        if self.btn_record.isChecked():
+            self.btn_record.setChecked(False)
+
+    def on_rec_mode_changed(self, text):
+        """
+        録画モードが変更されたときに呼ばれる処理のメソッド
+        "program" なら設定入力を無効化、"manual" なら有効化する
+        """
+
+        mode = text.strip()
+        if mode == "program":
+            self.settings_group.setEnabled(False)
+            self.trigger_group.setEnabled(False)
+        else:
+            self.settings_group.setEnabled(True)
+            self.trigger_group.setEnabled(True)

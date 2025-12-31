@@ -111,6 +111,22 @@ class TriggerHandler():
         self.speaker.set_value(1, val)
         if self.speaker.is_active(): self.speaker.on()
 
+    def close_all(self):
+        """
+        管理している全デバイスを安全に停止・切断するメソッド
+        """
+
+        try:
+            # 存在確認をしてからOFFにする
+            if self.ttl_triger_1: self.ttl_triger_1.off()
+            if self.ttl_triger_2: self.ttl_triger_2.off()
+            if self.blue_laser: self.blue_laser.off()
+            if self.red_laser: self.red_laser.off()
+            if self.speaker: self.speaker.off()
+        except Exception as e:
+            print(f"TriggerHandler Error in \"close_all\": {e}")
+
+
     #  --- 内部メソッド ---
     def _get_Mightex_BLS_led_controller(self, dev_id):
         """
@@ -146,4 +162,3 @@ class TriggerHandler():
 
         
         return dll, dev_handle
-

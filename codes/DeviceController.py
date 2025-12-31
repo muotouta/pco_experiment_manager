@@ -85,9 +85,9 @@ class DeviceController():
 
         return self.state
     
-    def set_value(self, param, val):
+    def set_value(self, param: int, val):
         """
-        自身の値を引数の値に変更するメソッド
+        自身の値(paramで区別)を引数の値に変更するメソッド
         """
 
         if self.value[param] is None:
@@ -95,7 +95,7 @@ class DeviceController():
         else:
             self.value[param] = val
 
-    def current_value(self, param):
+    def current_value(self, param: int):
         """
         自身の現在の値を答えるメソッド
         値を持たないデバイスでは、Noneが返る。
@@ -107,7 +107,7 @@ class DeviceController():
         else:
             return self.value[param]
     
-    def max_value(self, param):
+    def max_value(self, param: int):
         """
         自身の最大の値を答えるメソッド
         値を持たないデバイスでは、Noneが返る。
@@ -119,7 +119,7 @@ class DeviceController():
         else:
             return self.value_max[param]
     
-    def min_value(self, param):
+    def min_value(self, param: int):
         """
         自身の最小の値を答えるメソッド
         値を持たないデバイスでは、Noneが返る。
@@ -131,7 +131,7 @@ class DeviceController():
         else:
             return self.value_min[param]
 
-    def unit(self, param):
+    def unit(self, param: int):
         """
         自身の値の単位を答えるメソッド
         値を持たないデバイスでは、Noneが返る。
@@ -205,11 +205,12 @@ class Mightex_BLS_Controller(DeviceController):
         機器との通信の切断に責任を持つ
         """
 
+        self.analog_out_off()
+
         # デバイスとの通信を切断
         if self.dll and self.dev_handle >= 0:
             self.dll.MTUSB_BLSDriverCloseDevice(self.dev_handle)
             self.dev_handle = -1
-
 
 
 import numpy as np
@@ -333,3 +334,10 @@ class adafruit_3369_Controller(DeviceController):
         self.value_min[0] = 0
         self.value_max[1] = 100
         self.value_min[1] = 0
+
+    def __del__(self):
+        """
+        デストラクタ
+        """
+
+        self.sound_off()

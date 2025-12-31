@@ -22,18 +22,20 @@ from Conductor import Conductor
 from TriggerHandler import TriggerHandler
 
 
+QUEUE_SIZE = 0  # 0は制限なし
+
 def run():
     app = QApplication(sys.argv)
     
     # スレッド間通信用のキュー
-    data_queue = queue.Queue(maxsize=200)
+    data_queue = queue.Queue(maxsize=QUEUE_SIZE)
     
     # 各スレッドのインスタンス化
     a_camera_handler = CameraHandler(data_queue)
     a_trigger_handler = TriggerHandler()
     a_saver = Saver(data_queue, a_camera_handler)
-    a_conductor = Conductor(a_camera_handler, a_saver)
-    a_window = UIer(a_camera_handler, a_saver, a_trigger_handler)
+    a_conductor = Conductor(a_camera_handler, a_saver, a_trigger_handler)
+    a_window = UIer(a_camera_handler, a_saver, a_trigger_handler, a_conductor)
     
     # スレッド開始
     a_camera_handler.start()
