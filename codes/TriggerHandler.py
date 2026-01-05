@@ -148,6 +148,7 @@ class TriggerHandler():
             num_devices = dll.MTUSB_BLSDriverInitDevices()  # デバイスの初期化 (InitDevices)
         
             if num_devices <= 0:
+                dev_handle = -1
                 print(f"Class Mightex_BLS_Controller Error in \"__init__\": No found Mightex device(s).")
 
             if num_devices > 0:

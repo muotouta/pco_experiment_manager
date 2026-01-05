@@ -34,7 +34,7 @@ class Conductor():
         """
 
         self.desc = {
-            'program name' : "program 5",
+            'program name' : "program 3",
         }
         self.is_running = False
         self.recording_start_time = datetime.datetime.now()
@@ -231,14 +231,14 @@ class Conductor():
                         2 : なし
         """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 
-        speaker.set_value(0, 440)
+        speaker.set_value(0, 12000)
         speaker.set_value(1, 100)
 
         
         memo(f"pitch: {speaker.current_value(0)}(Hz), volume: {speaker.current_value(1)}(%)")
 
-        exporsure_set = [1]
-        max = 11
+        exporsure_set = [2, 0.6, 0.03]
+        max = 21
 
         
         for each in exporsure_set:
@@ -253,18 +253,11 @@ class Conductor():
             nashi = 0
             total = 0
             while True:
-                if ari >= max + 1 and nashi >= max + 1:
-                    break
-
                 blue_laser.on()
                 wait(1000)
 
                 start_record()
-
-                speaker.on()
-                wait(100)
-                speaker.off()
-                wait(900)
+                wait(1000)
 
                 coin = random.randint(0, 1)
                 if (coin == 0 and ari < max + 1) or (coin == 1 and nashi >= max + 1):
@@ -274,7 +267,7 @@ class Conductor():
                     nashi += 1
 
 
-                wait(500)
+                wait(100)
                 speaker.off()
                 wait(3900)
                 end_record()
@@ -289,5 +282,7 @@ class Conductor():
                 if ari < max + 1 and nashi < max + 1:
                     total += 1
                     next_trial()
+                elif ari >= max + 1 and nashi >= max + 1:
+                    break
 
         end()

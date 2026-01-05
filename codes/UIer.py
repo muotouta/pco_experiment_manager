@@ -540,7 +540,7 @@ class UIer(QMainWindow):
                 self.lbl_delay_val.setText(f"{delay_ms:.3f} {self.time_unit_id}")
 
         except Exception as e:
-            print(f"Delay calc error: {e}")
+            print(f"UIer Error in \"update_delay_display\": {e}")
     
     def update_limit_ranges(self):
         try:

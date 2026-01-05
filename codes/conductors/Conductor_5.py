@@ -253,9 +253,6 @@ class Conductor():
             nashi = 0
             total = 0
             while True:
-                if ari >= max + 1 and nashi >= max + 1:
-                    break
-
                 blue_laser.on()
                 wait(1000)
 
@@ -289,5 +286,7 @@ class Conductor():
                 if ari < max + 1 and nashi < max + 1:
                     total += 1
                     next_trial()
+                elif ari >= max + 1 and nashi >= max + 1:
+                    break
 
         end()

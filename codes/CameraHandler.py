@@ -19,7 +19,7 @@ import cv2
 from PyQt6.QtCore import QThread, pyqtSignal, pyqtSlot, Qt, QTimer
 
 
-SAVE_SECOND = 60  # pcoカメラの撮影の、リングバッファのサイズ。SAVE_SECOND秒分は保存するようにする。
+SAVE_SECOND = 120  # pcoカメラの撮影の、リングバッファのサイズ。SAVE_SECOND秒分は保存するようにする。
 
 class CameraHandler(QThread):
     """
@@ -98,8 +98,7 @@ class CameraHandler(QThread):
             req_buffer_size = int(self.desc["fps"] * SAVE_SECOND)
             if req_buffer_size < 1: req_buffer_size = 1
             
-            # デバッグ用: 実際に要求するサイズを表示
-            # print(f"DEBUG: Calculated Buffer Size = {req_buffer_size}")
+            # print(f"DEBUG: Calculated Buffer Size = {req_buffer_size}")  # デバッグ用: 実際に要求するサイズを表示
 
             self.a_cam.record(mode='ring buffer', number_of_images=req_buffer_size)
             
@@ -129,7 +128,7 @@ class CameraHandler(QThread):
                 print(f"CameraHandler Error in \"run\" while first frame fetch: {e}")
 
             # --- メインループ ---
-            # 修正: is_running (スレッド生存フラグ) でループを回す
+            # is_running (スレッド生存フラグ) でループを回す
             while self.is_running:
                 if self._update_params_flag:
                     self._apply_camera_settings(self.a_cam)
@@ -152,8 +151,7 @@ class CameraHandler(QThread):
                     if current_cam_frame_count - start_frame > buffer_size:
                         dropped_count = current_cam_frame_count - start_frame - buffer_size
                         # print(f"[BUFFER OVERFLOW] Skipped {dropped_count} frames! BufferSize: {buffer_size}")
-                        # 救出可能な最古のフレームまでインデックスを進める
-                        start_frame = current_cam_frame_count - buffer_size + 1
+                        start_frame = current_cam_frame_count - buffer_size + 1  # 救出可能な最古のフレームまでインデックスを進める
 
                     for f_num in range(start_frame, current_cam_frame_count + 1):
                         
@@ -185,12 +183,13 @@ class CameraHandler(QThread):
                                 self.new_frame_signal.emit(display_img, target_meta)
                         
                         elif self.camera_mode == "queue":
-                            # 画面更新は間引く
-                            if f_num % 2 == 0: 
+                            # 画面更新は間引く(skip_num枚に1枚)
+                            skip_num = 5
+                            if f_num % skip_num == 0: 
                                 display_img = self._trans_img(target_image)
                                 self.new_frame_signal.emit(display_img, target_meta)
 
-                            # 修正: 録画中 (is_recording) の場合のみキューに入れる
+                            # 録画中 (is_recording) の場合のみキューに入れる
                             if self.is_recording:
                                 try:
                                     self.data_queue.put_nowait((target_image.copy(), f_num, self.current_trial_id))
@@ -265,26 +264,26 @@ class CameraHandler(QThread):
         録画開始: is_recordingフラグを立てる。
         スレッド自体はrunで回り続けているので、フラグを変えるだけでよい。
         """
+
         self.is_recording = True
         self.record_started_signal.emit()  # 録画開始シグナルを発信
-        print("Recording Started.")
 
     def stop_recording(self):
         """
         録画停止: is_recordingフラグを下ろす。
         スレッドは停止させない。
         """
+
         self.is_recording = False
-        print("Recording Stopped.")
 
     def stop(self):
         """
         アプリケーション終了用: スレッド自体を停止させる
         """
+
         self.is_recording = False
         self.is_running = False # ループを抜けるように指示
         self.wait() # スレッドの完全停止を待つ
-
 
     def _trans_img(self, image_data):
         """

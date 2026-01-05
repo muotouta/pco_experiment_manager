@@ -94,9 +94,9 @@ class Saver(QThread):
                 row_format_filename = os.path.join(row_format_dir, f"{frame_in_trial_num:06d}.{ROW_FORMAT}")  # ファイル名を生成
                 cv2.imwrite(row_format_filename, image_data)  # pcoのrawデータはuint16が多く、cv2.imwriteはuint16のTIFF保存に対応しているので、OpenCVを使用。
 
-                # 画像保存
-                img_format_filename = os.path.join(img_format_dir, f"{frame_in_trial_num:06d}.{IMG_FORMAT}")  # ファイル名を生成
-                cv2.imwrite(img_format_filename, self._trans_img(image_data))
+                # # 画像保存
+                # img_format_filename = os.path.join(img_format_dir, f"{frame_in_trial_num:06d}.{IMG_FORMAT}")  # ファイル名を生成
+                # cv2.imwrite(img_format_filename, self._trans_img(image_data))
 
                 # フレーム落ちが発生していた場合、それを記録する。
                 if self.last_frame_num != -1 and frame_num - self.last_frame_num > 1:  # フレーム落ちが発生していた場合には、そのことを記録
@@ -179,6 +179,9 @@ class Saver(QThread):
         実験の背景情報の記録用メモを作成するメソッド
         """
 
+        time_unit_id = self.a_camera_handler.time_unit_id
+        time_unit = self.a_camera_handler.time_unit[time_unit_id]
+
         # メモの内容を作成
         content = (
             f"---------- Basic Information ----------" + "\n"
@@ -190,18 +193,9 @@ class Saver(QThread):
         content += (
             f"Camera Settings:" + "\n"
             f"    camera name: {self.a_camera_handler.desc['name']}" + "\n"
-        )
-        if self.experiment_mode == "manual":
-            content += (
-                f"    exposure time: not static because recording method is \"manual\"" + "\n"
-                f"    delay time: not static because recording method is \"manual\"" + "\n"
-                f"    fps: not static because recording method is \"manual\"" + "\n"
-            )
-        elif self.experiment_mode == "program":
-            content += (
-                f"    exposure time: {self.a_camera_handler.desc['exposure time']} ({self.a_camera_handler.time_unit_id})" + "\n"
-                f"    delay time: {self.a_camera_handler.desc['delay time']} ({self.a_camera_handler.time_unit_id})" + "\n"
-                f"    fps: {self.a_camera_handler.desc['fps']}" + "\n"
+            f"    exposure time when start recording: {self.a_camera_handler.desc['exposure time'] * time_unit} ({time_unit_id})" + "\n"
+            f"    delay time when start recording: {self.a_camera_handler.desc['delay time'] * time_unit} ({time_unit_id})" + "\n"
+            f"    fps when start recording: {self.a_camera_handler.desc['fps']}" + "\n"
             )
         content += (
             f"    bit scale: {self.a_camera_handler.desc['bit scale']}" + "\n"
