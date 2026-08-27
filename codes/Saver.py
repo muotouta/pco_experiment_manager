@@ -94,9 +94,9 @@ class Saver(QThread):
                 row_format_filename = os.path.join(row_format_dir, f"{frame_in_trial_num:06d}.{ROW_FORMAT}")  # ファイル名を生成
                 cv2.imwrite(row_format_filename, image_data)  # pcoのrawデータはuint16が多く、cv2.imwriteはuint16のTIFF保存に対応しているので、OpenCVを使用。
 
-                # # 画像保存
-                # img_format_filename = os.path.join(img_format_dir, f"{frame_in_trial_num:06d}.{IMG_FORMAT}")  # ファイル名を生成
-                # cv2.imwrite(img_format_filename, self._trans_img(image_data))
+                # 画像保存
+                img_format_filename = os.path.join(img_format_dir, f"{frame_in_trial_num:06d}.{IMG_FORMAT}")  # ファイル名を生成
+                cv2.imwrite(img_format_filename, self._trans_img(image_data))
 
                 # フレーム落ちが発生していた場合、それを記録する。
                 if self.last_frame_num != -1 and frame_num - self.last_frame_num > 1:  # フレーム落ちが発生していた場合には、そのことを記録

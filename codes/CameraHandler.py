@@ -184,7 +184,7 @@ class CameraHandler(QThread):
                         
                         elif self.camera_mode == "queue":
                             # 画面更新は間引く(skip_num枚に1枚)
-                            skip_num = 5
+                            skip_num = 1
                             if f_num % skip_num == 0: 
                                 display_img = self._trans_img(target_image)
                                 self.new_frame_signal.emit(display_img, target_meta)
